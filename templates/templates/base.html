@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>가계쀼 - 공유 가계부</title>
+    
+    <meta property="og:title" content="가계쀼 - 공유 가계부">
+    <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
+    <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
+    <meta property="og:url" content="{{ request.host_url }}">
+    
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
+            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
+            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; 
+            padding: var(--spacing-base); padding-bottom: 130px; 
+            max-width: 768px; margin: 0 auto; 
+        }
+
+        #nprogress { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--color-action); z-index: 9999; transform: scaleX(0); transform-origin: left; transition: transform 0.2s ease; }
+
+        .bottom-nav { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); 
+            border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; 
+            z-index: 1000; 
+            padding-bottom: calc(env(safe-area-inset-bottom) + 16px); padding-top: 10px; 
+            box-sizing: content-box; 
+        }
+        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
+        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
+
+        .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--color-action); color: var(--color-canvas); border-radius: var(--radius-action); padding: 12px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; flex-shrink: 0; }
+        .chip { display: inline-flex; align-items: center; justify-content: center; background-color: rgba(19, 189, 126, 0.15); color: var(--color-primary); border-radius: var(--radius-chip); padding: 6px 12px; font-size: 14px; font-weight: 500; border: none; text-decoration: none; cursor: pointer; flex-shrink: 0; }
+        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .input-field, select { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-action); padding: 12px 16px; font-size: 16px; color: var(--color-foreground); outline: none; font-family: var(--font-sans); width: 100%; box-sizing: border-box; min-width: 0; }
+        .input-field:focus, select:focus { border-color: var(--color-primary); }
+        
+        .flex-row { display: flex; gap: var(--spacing-sm); align-items: center; flex-wrap: wrap; margin-bottom: var(--spacing-md); }
+        .flex-row > .input-wrapper { flex: 1 1 130px; box-sizing: border-box; min-width: 0; }
+        
+        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
+        .month-selector h3 { font-size: 20px; font-weight: 700; }
+        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
+
+        dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+        dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
+        dialog input[type="time"], dialog input[type="date"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+
+        /* 스켈레톤 기본 스타일 */
+        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
+        .skeleton-text.short { width: 50%; }
+
+        /* 슬라이딩 아코디언 스타일 */
+        .slide-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease, margin-top 0.3s ease, opacity 0.3s ease; opacity: 0; margin-top: 0; }
+        .slide-wrapper.open { grid-template-rows: 1fr; opacity: 1; margin-top: 16px; }
+        .slide-inner { overflow: hidden; }
+        .arrow-icon { display: inline-block; transition: transform 0.3s ease; }
+        .arrow-icon.open { transform: rotate(180deg); }
+    </style>
+</head>
+<body>
+    <div id="nprogress"></div>
+    <main id="app-content">{% block content %}{% endblock %}</main>
+
+    {% if session.get('user_id') %}
+    <div class="bottom-nav">
+        <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}"><span style="font-size:20px;">🏠</span>홈</a>
+        <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}"><span style="font-size:20px;">📅</span>달력</a>
+        <a href="/transactions" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}"><span style="font-size:20px;">📝</span>내역</a>
+        <a href="/settings" class="nav-link {% if current_tab == 'settings' %}active{% endif %}"><span style="font-size:20px;">⚙️</span>설정</a>
+    </div>
+    {% endif %}
+
+    <script>
+        // PWA Service Worker 등록
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
+            });
+        }
+
+        // 공통 슬라이드 토글 제어
+        window.toggleSlide = function(wrapperId, arrowId) {
+            const wrapper = document.getElementById(wrapperId);
+            const arrow = document.getElementById(arrowId);
+            if(wrapper) wrapper.classList.toggle('open');
+            if(arrow) arrow.classList.toggle('open');
+        };
+
+        // 페이지별 구조를 반영한 스켈레톤 HTML 정의
+        const skeletonHome = `
+            <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
+            <div class="card"><h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2><div style="display: flex; gap: 12px; margin-bottom: 16px;"><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div></div><div class="skeleton" style="height:30px; border-radius:4px;"></div></div>
+            <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
+        `;
+
+        const skeletonCalendar = `
+            <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
+            <div class="card" style="padding: 16px; margin-bottom: 8px;">
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 12px; font-size:12px; font-weight:700;"><div style="color: #fe493d;">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: #0abde3;">토</div></div>
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; row-gap: 8px;">
+                    ${Array(35).fill('<div class="skeleton" style="min-height:50px; border-radius:4px;"></div>').join('')}
+                </div>
+            </div>
+            <div class="card" style="padding: 16px;"><div class="skeleton skeleton-text short" style="height:20px;"></div><div class="skeleton skeleton-text" style="height:60px;"></div></div>
+        `;
+
+        const skeletonTransactions = `
+            <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
+            <div class="card" style="margin-bottom: 8px;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"><h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3></div><div class="skeleton" style="height:200px; border-radius:8px;"></div></div>
+            <div class="card"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div>
+        `;
+
+        const skeletonSearch = `
+            <div style="margin-bottom: var(--spacing-lg);"><a href="#" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a></div>
+            <div class="card"><h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2><div class="skeleton" style="height:150px; border-radius:8px;"></div></div>
+            <div class="card" style="background: transparent; border: none; padding: 0;"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3><div><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div></div>
+        `;
+
+        const skeletonSettings = `
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">설정</h2>
+            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">참여 중인 사용자</h3><div class="skeleton" style="height:48px; border-radius:16px; margin-bottom:8px;"></div><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 이름 변경</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 초대</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">예산 설정</h3><div class="skeleton" style="height:150px; border-radius:16px;"></div></div>
+        `;
+
+        function getSkeletonHtml(urlStr) {
+            let path = '';
+            try { path = new URL(urlStr, window.location.origin).pathname; } catch(e) { path = urlStr; }
+            if (path.includes('calendar')) return skeletonCalendar;
+            if (path.includes('transactions')) return skeletonTransactions;
+            if (path.includes('search')) return skeletonSearch;
+            if (path.includes('settings') || path.includes('csv_manage')) return skeletonSettings;
+            return skeletonHome;
+        }
+
+        async function navigate(url, pushState = true) {
+            const bar = document.getElementById('nprogress');
+            bar.style.transition = 'transform 0.2s ease';
+            bar.style.transform = 'scaleX(0.4)';
+            
+            // 페이지 이동 구조에 맞는 맞춤형 스켈레톤 즉시 표시
+            document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
+            
+            try {
+                const response = await fetch(url);
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                document.title = doc.title;
+                if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
+                if(window.txObserver) window.txObserver.disconnect();
+                
+                document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                if(pushState) window.history.pushState({path: url}, '', url);
+                
+                document.querySelectorAll('.bottom-nav a').forEach(a => {
+                    a.classList.remove('active');
+                    if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
+                });
+
+                const scripts = document.getElementById('app-content').querySelectorAll('script');
+                scripts.forEach(s => {
+                    const newScript = document.createElement('script');
+                    Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(s.innerHTML));
+                    s.parentNode.replaceChild(newScript, s);
+                });
+            } catch (err) { window.location.href = url; } 
+            finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
+        }
+
+        window.addEventListener('popstate', (e) => { if(e.state) navigate(window.location.pathname + window.location.search, false); });
+        
+        document.addEventListener('click', e => { 
+            if (e.defaultPrevented) return; 
+            const link = e.target.closest('a'); 
+            if (link && link.origin === window.location.origin && !link.classList.contains('no-spa') && !link.hasAttribute('download')) { 
+                e.preventDefault(); 
+                navigate(link.href); 
+            } 
+        });
+        
+        document.addEventListener('submit', async e => {
+            if (e.defaultPrevented) return; 
+            const form = e.target;
+            if (form.classList.contains('no-spa')) return;
+            e.preventDefault();
+            const bar = document.getElementById('nprogress');
+            bar.style.transition = 'transform 0.2s ease';
+            bar.style.transform = 'scaleX(0.4)';
+            
+            const formData = new FormData(form);
+            const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;
+            
+            // 폼 제출(조회 폼 포함) 시 해당 페이지 구조의 스켈레톤 띄우기
+            document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
+            
+            try {
+                const response = await fetch(url, { method: form.method, body: form.method.toUpperCase() === 'POST' ? formData : null, redirect: 'follow' });
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                document.title = doc.title;
+                if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
+                if(window.txObserver) window.txObserver.disconnect();
+                
+                document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                window.history.pushState({path: response.url}, '', response.url);
+                
+                const scripts = document.getElementById('app-content').querySelectorAll('script');
+                scripts.forEach(s => {
+                    const newScript = document.createElement('script');
+                    Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(s.innerHTML));
+                    s.parentNode.replaceChild(newScript, s);
+                });
+            } catch (err) { form.submit(); } 
+            finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
+        });
+    </script>
+</body>
+</html>

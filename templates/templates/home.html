@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="month-selector">
+    <a href="/home?year={{ p_y }}&month={{ p_m }}">◀</a> 
+    <h3>{{ t_year }}년 {{ t_month }}월</h3>
+    <a href="/home?year={{ n_y }}&month={{ n_m }}">▶</a>
+</div>
+
+<div class="card">
+    <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
+    <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+        <div style="flex: 1; padding: 16px; background: rgba(19, 189, 126, 0.05); border-radius: var(--radius-action);">
+            <div style="font-size: 14px; color: var(--color-secondary);">총 수입</div>
+            <div style="font-size: 18px; font-weight: 700; color: var(--color-action);">+{{ '{:,}'.format(monthly_income) }}원</div>
+        </div>
+        <div style="flex: 1; padding: 16px; background: rgba(254, 73, 61, 0.05); border-radius: var(--radius-action);">
+            <div style="font-size: 14px; color: var(--color-secondary);">총 지출</div>
+            <div style="font-size: 18px; font-weight: 700; color: #fe493d;">-{{ '{:,}'.format(monthly_expense) }}원</div>
+        </div>
+    </div>
+    
+    {% if ledger.monthly_budget > 0 or monthly_expense > 0 or budget_status %}
+    <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
+
+        {% if ledger.monthly_budget > 0 %}
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
+            전체 예산 <span style="{% if monthly_expense > ledger.monthly_budget %}color: #fe493d;{% endif %}">({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(ledger.monthly_budget) }})</span>
+        </div>
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
+            {% set max_total = monthly_expense if monthly_expense > ledger.monthly_budget else ledger.monthly_budget %}
+            {% for payer, p_amount in payer_expense.items() %}
+                {% if max_total > 0 %}
+                <div style="height: 100%; width: {{ (p_amount / max_total * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        {% elif monthly_expense > 0 %}
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
+            총 지출 <span style="color: var(--color-secondary);">({{ '{:,}'.format(monthly_expense) }})</span>
+        </div>
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
+            {% for payer, p_amount in payer_expense.items() %}
+                <div style="height: 100%; width: {{ (p_amount / monthly_expense * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        
+        {% for b in budget_status if b.budget > 0 %}
+        <div style="margin-bottom: 8px;">
+            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
+                <span>{{ b.name }}</span>
+                <span style="{% if b.spent > b.budget %}color: #fe493d; font-weight: 700;{% endif %}">
+                    {{ '{:,}'.format(b.spent) }} / {{ '{:,}'.format(b.budget) }}
+                </span>
+            </div>
+            <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
+                {% set max_val = b.spent if b.spent > b.budget else b.budget %}
+                {% for payer, p_amount in b.payers.items() %}
+                    {% if max_val > 0 %}
+                    <div style="height: 100%; width: {{ (p_amount / max_val * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- 슬라이딩 애니메이션이 적용된 추가 예산 보기 -->
+        {% set unbudgeted_count = budget_status | selectattr('budget', 'equalto', 0) | list | length %}
+        {% if unbudgeted_count > 0 %}
+        
+        <div id="extra-budget-wrapper" class="slide-wrapper">
+            <div class="slide-inner">
+                <div style="border-top: 1px dashed var(--color-line); padding-top: 16px;">
+                    {% for b in budget_status if b.budget == 0 %}
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
+                            <span>{{ b.name }}</span>
+                            <span>{{ '{:,}'.format(b.spent) }}</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
+                            {% for payer, p_amount in b.payers.items() %}
+                                {% if b.spent > 0 %}
+                                <div style="height: 100%; width: {{ (p_amount / b.spent * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        
+        <div style="text-align: center; margin-top: 12px;">
+            <button type="button" class="chip" onclick="window.toggleSlide('extra-budget-wrapper', 'budget-arrow')" style="background: transparent; color: var(--color-secondary); border: 1px solid var(--color-line); font-size: 12px; padding: 6px 16px;">
+                예산 미설정 분류 보기 <span id="budget-arrow" class="arrow-icon">▼</span>
+            </button>
+        </div>
+        {% endif %}
+
+        {% if payer_color_map %}
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; margin-bottom: 4px; justify-content: center; align-items: center; background: rgba(0,0,0,0.02); padding: 10px 12px; border-radius: 8px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-right: 4px;">참여자</span>
+            {% for payer, color in payer_color_map.items() %}
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 12px; height: 12px; border-radius: 3px; background: {{ color }};"></div>
+                <span style="font-size: 12px; color: var(--color-foreground); font-weight: 600;">{{ payer }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3>
+    
+    <div style="margin-bottom: 32px;">
+        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">요일별 지출 누적 그래프</h4>
+        <div style="max-width: 100%;">
+            <canvas id="dowChart"></canvas>
+        </div>
+    </div>
+    
+    <div style="display: flex; justify-content: center;">
+        <div style="width: 100%; max-width: 320px;">
+            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 12px; text-align: center;">카테고리별 지출 비율</h4>
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<script>
+    {
+        setTimeout(() => {
+            window.appCharts = window.appCharts || {};
+            if(window.appCharts.catChart) window.appCharts.catChart.destroy();
+            if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
+
+            const payerColorMap = {{ payer_color_map | tojson | safe }};
+            const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
+
+            const catExpense = {{ cat_expense_total | tojson | safe }};
+            const activeCats = Object.keys(catExpense).filter(k => catExpense[k] > 0);
+            const catData = activeCats.map(k => catExpense[k]);
+            const catColors = activeCats.map((_, i) => themeColors[i % themeColors.length]);
+            
+            const dowExpenseByCat = {{ dow_expense_by_cat | tojson | safe }};
+            const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
+            const datasets = activeCats.map((cat, i) => { return { label: cat, data: dowExpenseByCat[cat], backgroundColor: catColors[i] }; });
+            
+            window.appCharts.dowChart = new Chart(document.getElementById('dowChart'), { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
+
+            window.appCharts.catChart = new Chart(document.getElementById('categoryChart'), { type: 'pie', data: { labels: activeCats, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
+        }, 50);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .tx-item { padding: 16px; margin-bottom: 8px; background: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); display: flex; justify-content: space-between; align-items: flex-start; }
+    .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
+</style>
+
+<div style="margin-bottom: var(--spacing-lg);">
+    <a href="/transactions" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a>
+</div>
+<div class="card">
+    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
+    <form action="/search" method="GET">
+        
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button type="button" id="search-btn-all" class="btn-tab {% if request.args.get('tx_type') not in ['수입', '지출'] %}active{% endif %}" onclick="window.setSearchTxType('')">전체</button>
+            <button type="button" id="search-btn-expense" class="btn-tab {% if request.args.get('tx_type') == '지출' %}active{% endif %}" onclick="window.setSearchTxType('지출')">지출</button>
+            <button type="button" id="search-btn-income" class="btn-tab {% if request.args.get('tx_type') == '수입' %}active{% endif %}" onclick="window.setSearchTxType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="search_tx_type" value="{{ request.args.get('tx_type', '') }}">
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="text" name="keyword" class="input-field" value="{{ request.args.get('keyword', '') }}" placeholder="검색어 (제목, 메모 포함)"></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="date" name="start_date" class="input-field" value="{{ request.args.get('start_date', '') }}"></div>
+            <span style="color: var(--color-muted);">~</span>
+            <div class="input-wrapper"><input type="date" name="end_date" class="input-field" value="{{ request.args.get('end_date', '') }}"></div>
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="number" name="min_amount" class="input-field" value="{{ request.args.get('min_amount', '') }}" placeholder="최소 금액(원)"></div>
+            <span style="color: var(--color-muted);">~</span>
+            <div class="input-wrapper"><input type="number" name="max_amount" class="input-field" value="{{ request.args.get('max_amount', '') }}" placeholder="최대 금액(원)"></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper">
+                <select name="category_id" class="input-field">
+                    <option value="">전체 분류</option>
+                    {% for cat in categories %}<option value="{{ cat.id }}" {% if request.args.get('category_id') == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-action" style="flex: 1;">검색</button>
+            <a href="/search" class="chip" style="padding: 12px; margin-left: 8px;">초기화</a>
+        </div>
+    </form>
+</div>
+
+<div class="card" style="background: transparent; border: none; padding: 0;">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과 ({{ transactions|length }}건)</h3>
+    
+    {% for tx in transactions %}
+        {% set color = 'var(--color-primary)' if tx.tx_type == '수입' else '#fe493d' %}
+        {% set sign = '+' if tx.tx_type == '수입' else '-' %}
+        <div class="tx-item" style="border-left: 4px solid {{ color }};">
+            <div style="flex: 1;">
+                <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">{{ tx.datetime_val.strftime('%Y-%m-%d') }} | 🧑 {{ tx.transactor }} | 🏷️ {{ tx.category.name }}</div>
+                <div style="font-weight: 700; font-size: 16px; word-break: break-all;">
+                    {{ tx.title }}
+                    {% if tx.exclude_analysis %}<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>{% endif %}
+                </div>
+                {% if tx.memo %}<div class="tx-memo">{{ tx.memo }}</div>{% endif %}
+            </div>
+            <div style="text-align: right; margin-left: 12px; min-width: 80px;">
+                <div style="font-weight: 700; font-size: 16px; color: {{ color }};">{{ sign }}{{ '{:,}'.format(tx.amount) }}원</div>
+                <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; line-height: 1;">
+                    <a href="/transaction/{{ tx.id }}/edit?next={{ request.url | urlencode }}" class="no-spa" style="font-size: 12px; color: var(--color-muted); text-decoration: none;">수정</a>
+                    <span style="color: var(--color-line);">|</span>
+                    <form action="/transaction/{{ tx.id }}/delete" method="POST" style="display: flex; align-items: center; margin: 0;" onsubmit="return confirm('정말 삭제하시겠습니까?');">
+                        <button type="submit" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div style="text-align: center; color: var(--color-muted); padding: 40px 0; background: var(--color-canvas); border-radius: var(--radius-card); border: 1px solid var(--color-line);">검색 결과가 없습니다.</div>
+    {% endfor %}
+</div>
+
+<script>
+    {
+        window.setSearchTxType = function(type) {
+            document.getElementById('search_tx_type').value = type;
+            document.querySelectorAll('#search-btn-all, #search-btn-expense, #search-btn-income').forEach(b => b.classList.remove('active'));
+            if (type === '지출') document.getElementById('search-btn-expense').classList.add('active');
+            else if (type === '수입') document.getElementById('search-btn-income').classList.add('active');
+            else document.getElementById('search-btn-all').classList.add('active');
+        };
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    /* 입력 필드 오버플로우 방지 (iPhone 등 작은 화면 대응) */
+    input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
+    .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
+
+    .date-divider { font-size: 14px; font-weight: 700; color: var(--color-secondary); margin: 24px 0 8px 0; border-bottom: 2px solid var(--color-line); padding-bottom: 4px; }
+    .tx-item { padding: 16px; margin-bottom: 8px; background: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); display: flex; justify-content: space-between; align-items: flex-start; }
+    .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
+    .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
+    dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+    dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
+    
+    #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    #toast-popup.show { opacity: 1; }
+
+    #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
+    #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
+    #edit-bottom-sheet.active { transform: translateY(0); }
+</style>
+
+<!-- 전역 미분류 카테고리 세팅 (수정/등록 폼 매핑용) -->
+{% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
+
+<div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
+
+<div class="month-selector">
+    <a href="/transactions?year={{ p_y }}&month={{ p_m }}">◀</a> 
+    <h3>{{ t_year }}년 {{ t_month }}월 내역</h3>
+    <a href="/transactions?year={{ n_y }}&month={{ n_m }}">▶</a>
+</div>
+
+<div class="card" style="margin-bottom: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3>
+        <a href="/search" class="chip no-spa" style="text-decoration: none;">🔍 내역 검색</a>
+    </div>
+    
+    <form id="tx-add-form" action="/transaction" method="POST">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button type="button" id="btn-expense" class="btn-tab active" onclick="window.setTxType('지출')">지출</button>
+            <button type="button" id="btn-income" class="btn-tab" onclick="window.setTxType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="tx_type" value="지출">
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="text" inputmode="numeric" id="amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="flex: 0 0 100px;">
+                <select name="transactor" required class="input-field">
+                    {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
+                    <option value="함께">함께</option>
+                </select>
+            </div>
+            <div class="input-wrapper"><input type="text" id="title_input" name="title" class="input-field" placeholder="제목 (예: 스타벅스)" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <select name="category_id" id="category_select" class="input-field" style="flex: 1;">
+                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
+                    {% for cat in categories if cat.name != '미분류' %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
+            </div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" class="input-field" value="{{ now.strftime('%Y-%m-%d') }}" required style="flex: 1;">
+                <input type="hidden" name="time" id="tx_time" value="{{ now.strftime('%H:%M') }}">
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
+            </div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 12px;">
+            <div class="input-wrapper"><input type="text" id="memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" id="exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
+            </label>
+        </div>
+        
+        <button type="submit" class="btn-action" style="width: 100%;">등록하기</button>
+    </form>
+</div>
+
+<!-- 내역 수정 바텀시트 -->
+<div id="edit-sheet-overlay" onclick="window.closeEditSheet()"></div>
+<div id="edit-bottom-sheet">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">내역 수정</h3>
+        <button type="button" class="chip" onclick="window.closeEditSheet()" style="background: none; color: var(--color-muted); font-size: 18px; padding: 0;">✕</button>
+    </div>
+
+    <form id="tx-edit-form" method="POST">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button type="button" id="edit-btn-expense" class="btn-tab active" onclick="window.setEditTxType('지출')">지출</button>
+            <button type="button" id="edit-btn-income" class="btn-tab" onclick="window.setEditTxType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="edit_tx_type" value="지출">
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" oninput="window.formatNumber(this)" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="flex: 0 0 100px;">
+                <select name="transactor" id="edit_transactor" required class="input-field">
+                    {% for u in ledger.users %}<option value="{{ u.nickname }}">{{ u.nickname }}</option>{% endfor %}
+                    <option value="함께">함께</option>
+                </select>
+            </div>
+            <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper">
+                <select name="category_id" id="edit_category_select" class="input-field">
+                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
+                    {% for cat in categories if cat.name != '미분류' %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" id="edit_date_input" class="input-field" required style="flex: 1;">
+                <input type="hidden" name="time" id="edit_time_input">
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" id="time-display-btn-edit" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
+            </div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 12px;">
+            <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field"></div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" id="edit_exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
+            </label>
+        </div>
+        
+        <button type="submit" class="btn-action" style="width: 100%;">수정 완료</button>
+    </form>
+</div>
+
+<!-- 시간 설정 다이얼로그 (등록용) -->
+<dialog id="time-dialog">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
+        <button type="button" class="chip" onclick="document.getElementById('time-dialog').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="time" id="time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
+    </div>
+    <button type="button" class="btn-action" style="width:100%;" onclick="window.setTime()">확인</button>
+</dialog>
+
+<!-- 시간 설정 다이얼로그 (수정용) -->
+<dialog id="time-dialog-edit">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">시간 변경</h3>
+        <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="time" id="time_picker_input_edit" class="input-field"></div>
+    </div>
+    <button type="button" class="btn-action" style="width:100%;" onclick="window.setTimeEdit()">확인</button>
+</dialog>
+
+<dialog id="cat-dialog">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">분류 관리</h3>
+        <button type="button" class="chip" onclick="document.getElementById('cat-dialog').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="text" id="new_cat_name" class="input-field" placeholder="새 분류 이름"></div>
+        <button type="button" class="btn-action" onclick="window.addCat()">추가</button>
+    </div>
+    <div id="cat-list" style="max-height: 300px; overflow-y: auto;"></div>
+</dialog>
+
+<div id="tx-container"></div>
+<div id="load-more-container" style="text-align: center; padding: 20px;">
+    <button id="load-more-btn" type="button" class="chip" onclick="window.loadTransactions()" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
+    <div id="loading-text" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
+</div>
+
+<script>
+    {
+        window.txDataStore = {};
+
+        // 요일 변환 함수
+        window.getDowStr = function(dateStr) {
+            const days = ['일','월','화','수','목','금','토'];
+            const d = new Date(dateStr + 'T00:00:00');
+            return `${dateStr} (${days[d.getDay()]})`;
+        };
+
+        window.formatNumber = function(input) {
+            let val = input.value.replace(/[^0-9]/g, '');
+            if(val === '') input.value = '';
+            else input.value = parseInt(val, 10).toLocaleString();
+        };
+
+        window.setTxType = function(type) {
+            document.getElementById('tx_type').value = type;
+            if (type === '지출') {
+                document.getElementById('btn-expense').classList.add('active');
+                document.getElementById('btn-income').classList.remove('active');
+                document.getElementById('amount_input').placeholder = '지출 금액(원)';
+            } else {
+                document.getElementById('btn-income').classList.add('active');
+                document.getElementById('btn-expense').classList.remove('active');
+                document.getElementById('amount_input').placeholder = '수입 금액(원)';
+            }
+        };
+
+        window.setTime = function() {
+            document.getElementById('tx_time').value = document.getElementById('time_picker_input').value;
+            document.getElementById('time-dialog').close();
+        };
+        
+        window.setTimeEdit = function() {
+            document.getElementById('edit_time_input').value = document.getElementById('time_picker_input_edit').value;
+            document.getElementById('time-dialog-edit').close();
+        };
+
+        window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
+        window.loadCategories = async function() {
+            const res = await fetch('/api/categories');
+            const cats = await res.json();
+            const editableCats = cats.filter(c => c.name !== '미분류');
+            const uncat = cats.find(c => c.name === '미분류');
+            
+            const list = document.getElementById('cat-list');
+            list.innerHTML = editableCats.map(c => `
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-line); align-items: center;">
+                    <div style="flex:1;">
+                        <input type="text" id="cat-name-${c.id}" value="${c.name}" class="input-field" style="display:none; padding:4px 8px; width:120px;">
+                        <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${c.name}</span>
+                    </div>
+                    <div style="display:flex; gap: 4px; align-items:center;">
+                        <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
+                        <button type="button" onclick="window.moveCat(${c.id}, 'down')" style="background:none;border:none;font-size:14px;cursor:pointer;">▼</button>
+                        <button type="button" id="cat-edit-btn-${c.id}" class="chip" onclick="window.enableEdit(${c.id})" style="padding:4px 8px;font-size:12px;">수정</button>
+                        <button type="button" id="cat-save-btn-${c.id}" class="chip" onclick="window.saveCat(${c.id})" style="display:none; background:var(--color-action); color:#fff; padding:4px 8px;font-size:12px;">저장</button>
+                        <button type="button" onclick="window.deleteCat(${c.id})" style="background:none;border:none;color:#fe493d;font-size:12px;padding:4px;cursor:pointer;">삭제</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const select = document.getElementById('category_select');
+            const editSelect = document.getElementById('edit_category_select');
+            const val = select.value;
+            const eval = editSelect ? editSelect.value : '';
+            
+            let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            select.innerHTML = selectHtml; select.value = val;
+            if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = eval; }
+        };
+        window.addCat = async function() { const name = document.getElementById('new_cat_name').value; if (!name) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); document.getElementById('new_cat_name').value = ''; window.loadCategories(); };
+        window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
+        window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
+        window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
+        window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
+
+        let currentPage = 1, hasNext = true, isLoading = false, lastRenderedDate = '';
+        const txContainer = document.getElementById('tx-container');
+        const loadMoreContainer = document.getElementById('load-more-container');
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        const loadingText = document.getElementById('loading-text');
+
+        window.loadTransactions = function() {
+            if (isLoading || !hasNext) return;
+            isLoading = true; loadMoreBtn.innerText = '불러오는 중...'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none';
+
+            fetch(`/api/transactions?page=${currentPage}`)
+                .then(res => res.json())
+                .then(data => {
+                    data.transactions.forEach(tx => {
+                        window.txDataStore[tx.id] = tx;
+                        if (tx.date !== lastRenderedDate) {
+                            // 요일 포맷 적용
+                            txContainer.innerHTML += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
+                            lastRenderedDate = tx.date;
+                        }
+                        const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
+                        const sign = tx.tx_type === '수입' ? '+' : '-';
+                        const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
+                        const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
+
+                        txContainer.innerHTML += `
+                            <div class="tx-item" style="border-left: 4px solid ${color};">
+                                <div style="flex: 1;">
+                                    <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
+                                    <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}</div>${memoHtml}
+                                </div>
+                                <div style="text-align: right; margin-left: 12px; min-width: 80px;">
+                                    <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
+                                    <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                                        <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
+                                        <span style="color: var(--color-line);">|</span>
+                                        <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
+                                    </div>
+                                </div>
+                            </div>`;
+                    });
+                    
+                    hasNext = data.has_next; currentPage++; isLoading = false;
+                    if (hasNext) { loadMoreBtn.innerText = '더보기'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none'; } 
+                    else { loadMoreBtn.style.display = 'none'; if (currentPage > 2 || data.transactions.length > 0) loadingText.style.display = 'block'; }
+                });
+        };
+
+        if(window.txObserver) window.txObserver.disconnect();
+        window.txObserver = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) window.loadTransactions(); }, { rootMargin: '100px' });
+        if(loadMoreContainer) window.txObserver.observe(loadMoreContainer);
+
+        // 내역 등록 (AJAX)
+        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            try {
+                const res = await fetch(e.target.action, { method: 'POST', body: fd });
+                if (res.ok) {
+                    document.getElementById('amount_input').value = '';
+                    document.getElementById('title_input').value = '';
+                    document.getElementById('memo_input').value = '';
+                    document.getElementById('exclude_analysis').checked = false;
+                    
+                    const t = document.getElementById('toast-popup'); t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
+                    
+                    txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+                }
+            } catch(e) { alert('오류가 발생했습니다.'); }
+        });
+
+        // 수정/삭제 바텀시트 제어
+        window.setEditTxType = function(type) {
+            document.getElementById('edit_tx_type').value = type;
+            if (type === '지출') { document.getElementById('edit-btn-expense').classList.add('active'); document.getElementById('edit-btn-income').classList.remove('active'); } 
+            else { document.getElementById('edit-btn-income').classList.add('active'); document.getElementById('edit-btn-expense').classList.remove('active'); }
+        };
+
+        window.openEditSheet = function(id) {
+            const tx = window.txDataStore[id];
+            document.getElementById('tx-edit-form').action = `/transaction/${tx.id}/edit`;
+            window.setEditTxType(tx.tx_type);
+            document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
+            document.getElementById('edit_transactor').value = tx.transactor;
+            document.getElementById('edit_title_input').value = tx.title;
+            // 미분류 매핑을 위해 안전하게 fallback
+            document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
+            document.getElementById('edit_date_input').value = tx.date;
+            document.getElementById('edit_time_input').value = tx.time;
+            document.getElementById('time_picker_input_edit').value = tx.time; // 다이얼로그 연동용
+            document.getElementById('edit_memo_input').value = tx.memo || "";
+            document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
+            
+            document.getElementById('edit-sheet-overlay').classList.add('active');
+            document.getElementById('edit-bottom-sheet').classList.add('active');
+        };
+
+        window.closeEditSheet = function() {
+            document.getElementById('edit-sheet-overlay').classList.remove('active');
+            document.getElementById('edit-bottom-sheet').classList.remove('active');
+        };
+
+        document.getElementById('tx-edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            const res = await fetch(e.target.action, {method: 'POST', body: fd});
+            if(res.ok) {
+                window.closeEditSheet();
+                const t = document.getElementById('toast-popup'); t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
+                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+            }
+        });
+
+        window.deleteTx = async function(id) {
+            if(!confirm('정말 삭제하시겠습니까?')) return;
+            let fd = new FormData(); fd.append('ajax', '1');
+            let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
+            if(res.ok) {
+                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+            }
+        };
+    }
+</script>
+{% endblock %}
