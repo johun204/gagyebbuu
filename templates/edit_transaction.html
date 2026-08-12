@@ -10,7 +10,6 @@
 <div class="card" style="margin-top: 20px;">
     <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 수정</h2>
     <form action="/transaction/{{ tx.id }}/edit" method="POST">
-        <!-- 기존 경로로 돌아가기 위한 hidden input 파라미터 추가 -->
         <input type="hidden" name="next" value="{{ next_url }}">
         
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -20,7 +19,8 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="number" name="amount" class="input-field" value="{{ tx.amount }}" required></div>
+            <!-- 콤마 포맷팅 유지, text타입으로 처리 -->
+            <div class="input-wrapper"><input type="text" inputmode="numeric" name="amount" class="input-field" value="{{ '{:,}'.format(tx.amount) if tx.amount else '' }}" oninput="window.formatNumber(this)" required></div>
         </div>
 
         <div class="flex-row">
@@ -69,7 +69,6 @@
     </form>
 </div>
 
-<!-- 시간 설정 다이얼로그 -->
 <dialog id="time-dialog-edit">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -83,6 +82,15 @@
 
 <script>
     {
+        window.formatNumber = function(input) {
+            let val = input.value.replace(/[^0-9]/g, '');
+            if(val === '') {
+                input.value = '';
+            } else {
+                input.value = parseInt(val, 10).toLocaleString();
+            }
+        };
+
         window.setTxTypeEdit = function(type) {
             document.getElementById('tx_type_edit').value = type;
             if (type === '지출') {

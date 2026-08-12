@@ -424,13 +424,17 @@ def set_budget():
     user = User.query.get(session['user_id'])
     ledger = Ledger.query.get(user.ledger_id)
     
-    ledger.monthly_budget = int(request.form.get('total_budget', 0))
+    # 예산 콤마 제거 후 정수 변환
+    tb_str = request.form.get('total_budget', '').replace(',', '')
+    ledger.monthly_budget = int(tb_str) if tb_str.isdigit() else 0
+    
     for key, val in request.form.items():
         if key.startswith('cat_budget_'):
             cat_id = int(key.replace('cat_budget_', ''))
             cat = Category.query.get(cat_id)
             if cat and cat.ledger_id == ledger.id and cat.name != '미분류':
-                cat.budget = int(val) if val else 0
+                val_str = val.replace(',', '') if val else ''
+                cat.budget = int(val_str) if val_str.isdigit() else 0
     
     db.session.commit()
     return redirect(url_for('settings'))
@@ -438,7 +442,10 @@ def set_budget():
 @app.route('/transaction', methods=['POST'])
 def add_transaction():
     user = User.query.get(session['user_id'])
-    amount = int(request.form.get('amount'))
+    # 금액 콤마 제거 후 정수 변환
+    amt_str = request.form.get('amount', '').replace(',', '')
+    amount = int(amt_str) if amt_str.isdigit() else 0
+    
     dt = datetime.strptime(f"{request.form.get('date')} {request.form.get('time')}", "%Y-%m-%d %H:%M")
     tx_type = request.form.get('tx_type')
     transactor = request.form.get('transactor')
@@ -491,7 +498,11 @@ def edit_transaction(tx_id):
         tx.transactor = request.form.get('transactor')
         tx.title = request.form.get('title')
         tx.memo = request.form.get('memo', '')
-        tx.amount = int(request.form.get('amount'))
+        
+        # 금액 콤마 제거 후 정수 변환
+        amt_str = request.form.get('amount', '').replace(',', '')
+        tx.amount = int(amt_str) if amt_str.isdigit() else 0
+        
         tx.exclude_analysis = (request.form.get('exclude_analysis') == 'on')
         
         cat_id = request.form.get('category_id')
