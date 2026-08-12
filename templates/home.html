@@ -22,16 +22,18 @@
     {% if ledger.monthly_budget > 0 or monthly_expense > 0 or budget_status %}
     <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
         
+        <!-- 전체 예산 -->
         {% if ledger.monthly_budget > 0 or monthly_expense > 0 %}
         {% set disp_total_budget = ledger.monthly_budget if ledger.monthly_budget > 0 else monthly_expense %}
         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">전체 예산 ({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(disp_total_budget) }})</div>
-        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
             {% set t_percent = (monthly_expense / disp_total_budget * 100) if disp_total_budget > 0 else 0 %}
             <div style="height: 100%; width: {{ t_percent if t_percent <= 100 else 100 }}%; background: {% if ledger.monthly_budget > 0 and monthly_expense > ledger.monthly_budget %}#fe493d{% else %}#06a96c{% endif %};"></div>
         </div>
         {% endif %}
         
-        {% for b in budget_status %}
+        <!-- 1. 예산이 설정된 카테고리 (기본 노출) -->
+        {% for b in budget_status if b.budget > 0 %}
         <div style="margin-bottom: 8px;">
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
                 <span>{{ b.name }}</span>
@@ -43,6 +45,34 @@
             </div>
         </div>
         {% endfor %}
+
+        <!-- 2. 예산 미설정(0원) 카테고리 (토글 숨김) -->
+        {% set unbudgeted_count = budget_status | selectattr('budget', 'equalto', 0) | list | length %}
+        {% if unbudgeted_count > 0 %}
+        <div id="extra-budget-container" style="display: none; margin-top: 16px; border-top: 1px dashed var(--color-line); padding-top: 16px;">
+            {% for b in budget_status if b.budget == 0 %}
+            <div style="margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
+                    <span>{{ b.name }}</span>
+                    <span>{{ '{:,}'.format(b.spent) }} / {{ '{:,}'.format(b.display_budget) }}</span>
+                </div>
+                <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden;">
+                    {% set percent = (b.spent / b.display_budget * 100) if b.display_budget > 0 else 0 %}
+                    <!-- 예산이 없으므로 초과할 일이 없어 무조건 정상(초록색)으로 표출 -->
+                    <div style="height: 100%; width: {{ percent if percent <= 100 else 100 }}%; background: #06a96c;"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- 전체보기 토글 버튼 -->
+        <div style="text-align: center; margin-top: 12px;">
+            <button type="button" class="chip" id="toggle-budget-btn" onclick="window.toggleExtraBudget()" style="background: transparent; color: var(--color-secondary); border: 1px solid var(--color-line); font-size: 12px; padding: 6px 16px;">
+                예산 미설정 분류 보기 ▼
+            </button>
+        </div>
+        {% endif %}
+
     </div>
     {% endif %}
 </div>
@@ -70,33 +100,49 @@
 </div>
 
 <script>
-    setTimeout(() => {
-        window.appCharts = window.appCharts || {};
-        if(window.appCharts.catChart) window.appCharts.catChart.destroy();
-        if(window.appCharts.payerChart) window.appCharts.payerChart.destroy();
-        if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
+    {
+        // 예산 미설정 토글 기능
+        window.toggleExtraBudget = function() {
+            const container = document.getElementById('extra-budget-container');
+            const btn = document.getElementById('toggle-budget-btn');
+            if (container.style.display === 'none') {
+                container.style.display = 'block';
+                btn.innerText = '예산 미설정 분류 접기 ▲';
+            } else {
+                container.style.display = 'none';
+                btn.innerText = '예산 미설정 분류 보기 ▼';
+            }
+        };
 
-        const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
+        // SPA 비동기 렌더링 딜레이를 위한 setTimeout
+        setTimeout(() => {
+            window.appCharts = window.appCharts || {};
+            if(window.appCharts.catChart) window.appCharts.catChart.destroy();
+            if(window.appCharts.payerChart) window.appCharts.payerChart.destroy();
+            if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
 
-        const catExpense = {{ cat_expense_total | tojson | safe }};
-        const activeCats = Object.keys(catExpense).filter(k => catExpense[k] > 0);
-        const catData = activeCats.map(k => catExpense[k]);
-        const catColors = activeCats.map((_, i) => themeColors[i % themeColors.length]);
-        
-        const dowExpenseByCat = {{ dow_expense_by_cat | tojson | safe }};
-        const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
-        const datasets = activeCats.map((cat, i) => { return { label: cat, data: dowExpenseByCat[cat], backgroundColor: catColors[i] }; });
-        
-        window.appCharts.dowChart = new Chart(document.getElementById('dowChart'), { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
+            const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
 
-        window.appCharts.catChart = new Chart(document.getElementById('categoryChart'), { type: 'pie', data: { labels: activeCats, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
+            const catExpense = {{ cat_expense_total | tojson | safe }};
+            const activeCats = Object.keys(catExpense).filter(k => catExpense[k] > 0);
+            const catData = activeCats.map(k => catExpense[k]);
+            const catColors = activeCats.map((_, i) => themeColors[i % themeColors.length]);
+            
+            const dowExpenseByCat = {{ dow_expense_by_cat | tojson | safe }};
+            const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
+            const datasets = activeCats.map((cat, i) => { return { label: cat, data: dowExpenseByCat[cat], backgroundColor: catColors[i] }; });
+            
+            window.appCharts.dowChart = new Chart(document.getElementById('dowChart'), { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
 
-        const payerExpense = {{ payer_expense | tojson | safe }};
-        const payerLabels = Object.keys(payerExpense).filter(k => payerExpense[k] > 0);
-        const payerData = payerLabels.map(k => payerExpense[k]);
-        const payerColors = payerLabels.map((_, i) => themeColors[(i + 4) % themeColors.length]);
-        
-        window.appCharts.payerChart = new Chart(document.getElementById('payerChart'), { type: 'pie', data: { labels: payerLabels, datasets: [{ data: payerData, backgroundColor: payerColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
-    }, 50);
+            window.appCharts.catChart = new Chart(document.getElementById('categoryChart'), { type: 'pie', data: { labels: activeCats, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
+
+            const payerExpense = {{ payer_expense | tojson | safe }};
+            const payerLabels = Object.keys(payerExpense).filter(k => payerExpense[k] > 0);
+            const payerData = payerLabels.map(k => payerExpense[k]);
+            const payerColors = payerLabels.map((_, i) => themeColors[(i + 4) % themeColors.length]);
+            
+            window.appCharts.payerChart = new Chart(document.getElementById('payerChart'), { type: 'pie', data: { labels: payerLabels, datasets: [{ data: payerData, backgroundColor: payerColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
+        }, 50);
+    }
 </script>
 {% endblock %}
