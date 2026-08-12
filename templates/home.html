@@ -21,18 +21,30 @@
     
     {% if ledger.monthly_budget > 0 or monthly_expense > 0 or budget_status %}
     <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
-        
-        <!-- 전체 예산 요약 -->
+
+        <!-- 전체 예산 (누적 가로막대 적용) -->
         {% if ledger.monthly_budget > 0 %}
         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
             전체 예산 <span style="{% if monthly_expense > ledger.monthly_budget %}color: #fe493d;{% endif %}">({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(ledger.monthly_budget) }})</span>
         </div>
-        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
-            {% set t_percent = (monthly_expense / ledger.monthly_budget * 100) %}
-            <div style="height: 100%; width: {{ t_percent if t_percent <= 100 else 100 }}%; background: {% if monthly_expense > ledger.monthly_budget %}#fe493d{% else %}#06a96c{% endif %};"></div>
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
+            {% set max_total = monthly_expense if monthly_expense > ledger.monthly_budget else ledger.monthly_budget %}
+            {% for payer, p_amount in payer_expense.items() %}
+                {% if max_total > 0 %}
+                <div style="height: 100%; width: {{ (p_amount / max_total * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                {% endif %}
+            {% endfor %}
         </div>
-        {% else %}
-        <div style="font-size: 14px; font-weight: 700; margin-bottom: 16px;">총 지출 ({{ '{:,}'.format(monthly_expense) }})</div>
+        {% elif monthly_expense > 0 %}
+        <!-- 전체 예산이 0원이고 지출만 있는 경우 -->
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
+            총 지출 <span style="color: var(--color-secondary);">({{ '{:,}'.format(monthly_expense) }})</span>
+        </div>
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
+            {% for payer, p_amount in payer_expense.items() %}
+                <div style="height: 100%; width: {{ (p_amount / monthly_expense * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+            {% endfor %}
+        </div>
         {% endif %}
         
         <!-- 1. 예산이 설정된 카테고리 (기본 노출) -->
@@ -84,6 +96,19 @@
         </div>
         {% endif %}
 
+        <!-- 거래자별 색상 범례 표시 -->
+        {% if payer_color_map %}
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; margin-bottom: 4px; justify-content: center; align-items: center; background: rgba(0,0,0,0.02); padding: 10px 12px; border-radius: 8px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-right: 4px;">참여자</span>
+            {% for payer, color in payer_color_map.items() %}
+            <div style="display: flex; align-items: center; gap: 6px;">
+                <div style="width: 12px; height: 12px; border-radius: 3px; background: {{ color }};"></div>
+                <span style="font-size: 12px; color: var(--color-foreground); font-weight: 600;">{{ payer }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
     </div>
     {% endif %}
 </div>
@@ -98,14 +123,10 @@
         </div>
     </div>
     
-    <div style="display: flex; flex-wrap: wrap; gap: 24px; justify-content: center;">
-        <div style="flex: 1; min-width: 200px; max-width: 280px;">
-            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">카테고리별 지출</h4>
+    <div style="display: flex; justify-content: center;">
+        <div style="width: 100%; max-width: 320px;">
+            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 12px; text-align: center;">카테고리별 지출 비율</h4>
             <canvas id="categoryChart"></canvas>
-        </div>
-        <div style="flex: 1; min-width: 200px; max-width: 280px;">
-            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">거래자별 지출</h4>
-            <canvas id="payerChart"></canvas>
         </div>
     </div>
 </div>
@@ -127,11 +148,8 @@
         setTimeout(() => {
             window.appCharts = window.appCharts || {};
             if(window.appCharts.catChart) window.appCharts.catChart.destroy();
-            if(window.appCharts.payerChart) window.appCharts.payerChart.destroy();
             if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
 
-            // app.py에서 내려준 색상 맵핑으로 동기화 처리
-            const payerColorMap = {{ payer_color_map | tojson | safe }};
             const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
 
             const catExpense = {{ cat_expense_total | tojson | safe }};
@@ -146,13 +164,6 @@
             window.appCharts.dowChart = new Chart(document.getElementById('dowChart'), { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
 
             window.appCharts.catChart = new Chart(document.getElementById('categoryChart'), { type: 'pie', data: { labels: activeCats, datasets: [{ data: catData, backgroundColor: catColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
-
-            const payerExpense = {{ payer_expense | tojson | safe }};
-            const payerLabels = Object.keys(payerExpense).filter(k => payerExpense[k] > 0);
-            const payerData = payerLabels.map(k => payerExpense[k]);
-            const payerColors = payerLabels.map(k => payerColorMap[k]);
-            
-            window.appCharts.payerChart = new Chart(document.getElementById('payerChart'), { type: 'pie', data: { labels: payerLabels, datasets: [{ data: payerData, backgroundColor: payerColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
         }, 50);
     }
 </script>
