@@ -3,11 +3,16 @@
 <style>
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
+    dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+    dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
 </style>
 
 <div class="card" style="margin-top: 20px;">
     <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 수정</h2>
     <form action="/transaction/{{ tx.id }}/edit" method="POST">
+        <!-- 기존 경로로 돌아가기 위한 hidden input 파라미터 추가 -->
+        <input type="hidden" name="next" value="{{ next_url }}">
+        
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
             <button type="button" id="btn-expense-edit" class="btn-tab {% if tx.tx_type == '지출' %}active{% endif %}" onclick="window.setTxTypeEdit('지출')">지출</button>
             <button type="button" id="btn-income-edit" class="btn-tab {% if tx.tx_type == '수입' %}active{% endif %}" onclick="window.setTxTypeEdit('수입')">수입</button>
@@ -43,7 +48,7 @@
             <div class="input-wrapper" style="display: flex; gap: 8px;">
                 <input type="date" name="date" class="input-field" value="{{ tx.datetime_val.strftime('%Y-%m-%d') }}" required style="flex: 1;">
                 <input type="hidden" name="time" id="tx_time_edit" value="{{ tx.datetime_val.strftime('%H:%M') }}">
-                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" style="padding: 10px 12px; font-size: 16px;">🕒</button>
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" id="time-display-btn-edit" style="padding: 10px 12px; font-size: 16px;">{{ tx.datetime_val.strftime('%H:%M') }} 🕒</button>
             </div>
         </div>
         
@@ -58,7 +63,7 @@
         </div>
         
         <div class="flex-row" style="justify-content: center; margin-top: 16px;">
-            <a href="/transactions" class="chip" style="color: var(--color-secondary); background: var(--color-line);">취소</a>
+            <a href="{{ next_url if next_url else '/transactions' }}" class="chip" style="color: var(--color-secondary); background: var(--color-line);">취소</a>
             <button type="submit" class="btn-action">수정 완료</button>
         </div>
     </form>
@@ -90,7 +95,9 @@
         };
 
         window.setTimeEdit = function() {
-            document.getElementById('tx_time_edit').value = document.getElementById('time_picker_input_edit').value;
+            const t = document.getElementById('time_picker_input_edit').value;
+            document.getElementById('tx_time_edit').value = t;
+            document.getElementById('time-display-btn-edit').innerText = t + ' 🕒';
             document.getElementById('time-dialog-edit').close();
         };
     }

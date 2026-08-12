@@ -1,16 +1,32 @@
 {% extends "base.html" %}
 {% block content %}
+<style>
+    .tx-item { padding: 16px; margin-bottom: 8px; background: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); display: flex; justify-content: space-between; align-items: flex-start; }
+    .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
+</style>
+
 <div style="margin-bottom: var(--spacing-lg);">
     <a href="/transactions" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a>
 </div>
 <div class="card">
-    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 검색</h2>
+    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
     <form action="/search" method="GET">
         <div class="flex-row">
+            <div class="input-wrapper"><input type="text" name="keyword" class="input-field" value="{{ request.args.get('keyword', '') }}" placeholder="검색어 (제목, 메모 포함)"></div>
+        </div>
+        
+        <div class="flex-row">
             <div class="input-wrapper"><input type="date" name="start_date" class="input-field" value="{{ request.args.get('start_date', '') }}"></div>
-            <span>~</span>
+            <span style="color: var(--color-muted);">~</span>
             <div class="input-wrapper"><input type="date" name="end_date" class="input-field" value="{{ request.args.get('end_date', '') }}"></div>
         </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="number" name="min_amount" class="input-field" value="{{ request.args.get('min_amount', '') }}" placeholder="최소 금액(원)"></div>
+            <span style="color: var(--color-muted);">~</span>
+            <div class="input-wrapper"><input type="number" name="max_amount" class="input-field" value="{{ request.args.get('max_amount', '') }}" placeholder="최대 금액(원)"></div>
+        </div>
+        
         <div class="flex-row">
             <div class="input-wrapper">
                 <select name="category_id" class="input-field">
@@ -24,25 +40,36 @@
     </form>
 </div>
 
-<div class="card">
-    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3>
-    <div style="overflow-x: auto;">
-        <table style="width: 100%; min-width: 500px; text-align: left; border-collapse: collapse;">
-            <thead><tr><th style="padding-bottom: 8px;">일자</th><th>거래자/분류</th><th>제목(메모)</th><th style="text-align: right;">금액</th><th>기록자</th></tr></thead>
-            <tbody>
-                {% for tx in transactions %}
-                <tr style="border-top: 1px solid var(--color-line);">
-                    <td style="padding: 8px 0;">{{ tx.datetime_val.strftime('%Y-%m-%d') }}</td>
-                    <td>🧑 {{ tx.transactor }}<br>🏷️ {{ tx.category.name }}</td>
-                    <td>{{ tx.title }}<br><span style="font-size:11px; color:var(--color-muted);">{{ tx.memo }}</span></td>
-                    <td style="font-weight: 700; text-align: right; color: {% if tx.tx_type == '수입' %}var(--color-primary){% else %}#fe493d{% endif %};">
-                        {% if tx.tx_type == '수입' %}+{% else %}-{% endif %}{{ '{:,}'.format(tx.amount) }}원
-                    </td>
-                    <td>{{ tx.user.nickname }}</td>
-                </tr>
-                {% else %}<tr><td colspan="5" style="text-align: center; padding: 16px 0; color: var(--color-muted);">검색 결과가 없습니다.</td></tr>{% endfor %}
-            </tbody>
-        </table>
-    </div>
+<div class="card" style="background: transparent; border: none; padding: 0;">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과 ({{ transactions|length }}건)</h3>
+    
+    {% for tx in transactions %}
+        {% set color = 'var(--color-primary)' if tx.tx_type == '수입' else '#fe493d' %}
+        {% set sign = '+' if tx.tx_type == '수입' else '-' %}
+        <div class="tx-item" style="border-left: 4px solid {{ color }};">
+            <div style="flex: 1;">
+                <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">{{ tx.datetime_val.strftime('%Y-%m-%d') }} | 🧑 {{ tx.transactor }} | 🏷️ {{ tx.category.name }}</div>
+                <div style="font-weight: 700; font-size: 16px; word-break: break-all;">
+                    {{ tx.title }}
+                    {% if tx.exclude_analysis %}<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>{% endif %}
+                </div>
+                {% if tx.memo %}<div class="tx-memo">{{ tx.memo }}</div>{% endif %}
+            </div>
+            <div style="text-align: right; margin-left: 12px; min-width: 80px;">
+                <div style="font-weight: 700; font-size: 16px; color: {{ color }};">{{ sign }}{{ '{:,}'.format(tx.amount) }}원</div>
+                <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; line-height: 1;">
+                    <!-- 수정 시 복귀할 URL 파라미터(next) 전송 -->
+                    <a href="/transaction/{{ tx.id }}/edit?next={{ request.url | urlencode }}" class="no-spa" style="font-size: 12px; color: var(--color-muted); text-decoration: none;">수정</a>
+                    <span style="color: var(--color-line);">|</span>
+                    <!-- 삭제 시 검색 결과 유지 (request.referrer)를 활용해 app.py에서 리다이렉트됨 -->
+                    <form action="/transaction/{{ tx.id }}/delete" method="POST" style="display: flex; align-items: center; margin: 0;" onsubmit="return confirm('정말 삭제하시겠습니까?');">
+                        <button type="submit" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    {% else %}
+        <div style="text-align: center; color: var(--color-muted); padding: 40px 0; background: var(--color-canvas); border-radius: var(--radius-card); border: 1px solid var(--color-line);">검색 결과가 없습니다.</div>
+    {% endfor %}
 </div>
 {% endblock %}

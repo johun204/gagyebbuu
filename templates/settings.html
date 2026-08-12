@@ -4,9 +4,14 @@
 
 <div class="card">
     <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3>
-    <form action="/update_nickname" method="POST" class="flex-row">
-        <div class="input-wrapper"><input type="text" name="nickname" class="input-field" value="{{ current_user.nickname }}" required></div>
-        <button type="submit" class="btn-action">변경</button>
+    <form action="/update_nickname" method="POST">
+        <div class="flex-row" style="margin-bottom: 8px;">
+            <div class="input-wrapper"><input type="text" name="nickname" class="input-field" value="{{ current_user.nickname }}" required></div>
+            <button type="submit" class="btn-action">변경</button>
+        </div>
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-secondary); cursor: pointer; padding-left: 4px;">
+            <input type="checkbox" name="update_past" style="width:16px; height:16px;"> 기존 등록된 내역의 이름도 함께 변경하기
+        </label>
     </form>
 </div>
 
@@ -33,19 +38,30 @@
 </div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 초대</h3>
-    <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 12px;">가족이나 연인을 초대해 함께 가계부를 관리하세요.</p>
-    
-    <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 링크</label>
-    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; margin-top: 4px;">
-        <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-        <button type="button" class="btn-action" onclick="window.copyLink()" style="padding: 0 16px; height: 48px;">복사</button>
+    <!-- 초대가 완료된 상태(인원 2명)면 접혀서 시작되도록 분기 처리 -->
+    {% if ledger.users|length >= 2 %}
+    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="document.getElementById('invite-content').style.display = document.getElementById('invite-content').style.display === 'none' ? 'block' : 'none'; document.getElementById('invite-arrow').innerText = document.getElementById('invite-content').style.display === 'none' ? '▼' : '▲';">
+        <h3 style="font-size: 16px; font-weight: 700; margin: 0;">가계부 초대 <span class="chip" style="font-size: 10px; padding: 2px 6px; background: rgba(6, 169, 108, 0.15); color: var(--color-action); margin-left: 4px;">완료</span></h3>
+        <span id="invite-arrow" style="font-size: 12px; color: var(--color-muted);">▼</span>
     </div>
+    <div id="invite-content" style="display: none; margin-top: 16px; border-top: 1px solid var(--color-line); padding-top: 16px;">
+    {% else %}
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 초대</h3>
+    <div id="invite-content">
+    {% endif %}
+        <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 12px;">가족이나 연인을 초대해 함께 가계부를 관리하세요.</p>
+        
+        <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 링크</label>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; margin-top: 4px;">
+            <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
+            <button type="button" class="btn-action" onclick="window.copyLink()" style="padding: 0 16px; height: 48px;">복사</button>
+        </div>
 
-    <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 코드 (직접 입력용)</label>
-    <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
-        <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-        <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
+        <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 코드 (직접 입력용)</label>
+        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+            <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
+            <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
+        </div>
     </div>
 </div>
 

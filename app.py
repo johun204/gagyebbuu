@@ -3,35 +3,27 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 from datetime import datetime, timedelta
 import csv
 import io
-import json
 import requests
 from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
-try:
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load(f)
-except:
-    config = {}
+# config.json을 완전히 제거하고 Vercel 환경 변수로만 작동합니다.
+app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
 
-# Vercel 환경변수에서 값을 가져오고, 없으면 config.json 또는 기본값을 사용합니다.
-app.secret_key = os.environ.get('SECRET_KEY') or config.get('SECRET_KEY', 'dev_key')
-
-# Neon PostgreSQL의 DATABASE_URL을 가져옵니다. 
-# SQLAlchemy 1.4 이상에서는 postgres:// 대신 postgresql:// 을 사용해야 하므로 이를 변환합니다.
-db_url = os.environ.get('DATABASE_URL', 'sqlite:///ledger.db')
+# Neon PostgreSQL 연결 문자열 처리 (SQLAlchemy 호환을 위해 postgres:// 를 postgresql:// 로 변경)
+db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
-    
+
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 db.init_app(app)
 
 with app.app_context():
     db.create_all()
 
-KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID') or config.get('KAKAO_CLIENT_ID')
-KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET') or config.get('KAKAO_CLIENT_SECRET')
+KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
+KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
 @app.before_request
 def require_login():
@@ -73,7 +65,6 @@ def get_target_date():
     return target_year, target_month, p_y, p_m, n_y, n_m
 
 def get_kakao_redirect_uri():
-    # Vercel 배포 시, HTTPS가 적용된 도메인이 반환됩니다.
     return f"{request.host_url.rstrip('/')}/oauth/kakao/callback"
 
 def get_or_create_uncategorized(ledger_id):
@@ -394,8 +385,13 @@ def settings():
 def update_nickname():
     user = User.query.get(session['user_id'])
     new_nickname = request.form.get('nickname')
+    update_past = request.form.get('update_past') == 'on'
+    
     if new_nickname:
+        old_nickname = user.nickname
         user.nickname = new_nickname
+        if update_past:
+            Transaction.query.filter_by(ledger_id=user.ledger_id, transactor=old_nickname).update({'transactor': new_nickname})
         db.session.commit()
     return redirect(url_for('settings'))
 
@@ -490,10 +486,13 @@ def edit_transaction(tx_id):
         
         tx.datetime_val = datetime.strptime(f"{request.form.get('date')} {request.form.get('time')}", "%Y-%m-%d %H:%M")
         db.session.commit()
-        return redirect(url_for('transactions'))
+        
+        next_url = request.form.get('next') or url_for('transactions')
+        return redirect(next_url)
         
     categories = Category.query.filter_by(ledger_id=user.ledger_id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    return render_template('edit_transaction.html', tx=tx, ledger=ledger, categories=categories, current_tab='transactions')
+    next_url = request.args.get('next', '')
+    return render_template('edit_transaction.html', tx=tx, ledger=ledger, categories=categories, next_url=next_url, current_tab='transactions')
 
 @app.route('/transaction/<int:tx_id>/delete', methods=['POST'])
 def delete_transaction(tx_id):
@@ -502,7 +501,7 @@ def delete_transaction(tx_id):
     if tx:
         db.session.delete(tx)
         db.session.commit()
-    return redirect(url_for('transactions'))
+    return redirect(request.referrer or url_for('transactions'))
 
 @app.route('/search')
 def search():
@@ -512,8 +511,12 @@ def search():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     category_id = request.args.get('category_id')
+    keyword = request.args.get('keyword')
+    min_amount = request.args.get('min_amount')
+    max_amount = request.args.get('max_amount')
     
     query = Transaction.query.filter_by(ledger_id=ledger.id)
+    
     if start_date:
         st = datetime.strptime(start_date, "%Y-%m-%d")
         query = query.filter(Transaction.datetime_val >= st)
@@ -522,6 +525,15 @@ def search():
         query = query.filter(Transaction.datetime_val <= ed)
     if category_id:
         query = query.filter(Transaction.category_id == category_id)
+        
+    if keyword:
+        search_kw = f"%{keyword}%"
+        query = query.filter((Transaction.title.like(search_kw)) | (Transaction.memo.like(search_kw)))
+        
+    if min_amount and min_amount.isdigit():
+        query = query.filter(Transaction.amount >= int(min_amount))
+    if max_amount and max_amount.isdigit():
+        query = query.filter(Transaction.amount <= int(max_amount))
         
     transactions = query.order_by(Transaction.datetime_val.desc()).all()
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
@@ -614,4 +626,4 @@ def import_csv():
     return redirect(url_for('csv_manage'))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5050, debug=False)
+    app.run(host='0.0.0.0', debug=False)
