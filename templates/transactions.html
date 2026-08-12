@@ -8,7 +8,14 @@
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
     dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
     dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
+    
+    /* 토스트 팝업 CSS */
+    #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    #toast-popup.show { opacity: 1; }
 </style>
+
+<!-- 토스트 팝업 컨테이너 -->
+<div id="toast-popup">내역이 성공적으로 등록되었습니다.</div>
 
 <div class="month-selector">
     <a href="/transactions?year={{ p_y }}&month={{ p_m }}">◀</a> 
@@ -22,7 +29,8 @@
         <a href="/search" class="chip no-spa" style="text-decoration: none;">🔍 내역 검색</a>
     </div>
     
-    <form action="/transaction" method="POST">
+    <!-- 폼 ID 부여 및 AJAX 제출 연결 -->
+    <form id="tx-add-form" action="/transaction" method="POST">
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
             <button type="button" id="btn-expense" class="btn-tab active" onclick="window.setTxType('지출')">지출</button>
             <button type="button" id="btn-income" class="btn-tab" onclick="window.setTxType('수입')">수입</button>
@@ -30,7 +38,6 @@
         </div>
 
         <div class="flex-row">
-            <!-- text타입으로 변경, 콤마 자동 적용 함수 연결 -->
             <div class="input-wrapper"><input type="text" inputmode="numeric" id="amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
         
@@ -41,7 +48,7 @@
                     <option value="함께">함께</option>
                 </select>
             </div>
-            <div class="input-wrapper"><input type="text" name="title" class="input-field" placeholder="제목 (예: 스타벅스)" required></div>
+            <div class="input-wrapper"><input type="text" id="title_input" name="title" class="input-field" placeholder="제목 (예: 스타벅스)" required></div>
         </div>
         
         <div class="flex-row">
@@ -65,12 +72,12 @@
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
+            <div class="input-wrapper"><input type="text" id="memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 16px;">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
-                <input type="checkbox" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
+                <input type="checkbox" id="exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
             </label>
         </div>
         
@@ -109,7 +116,39 @@
 
 <script>
     {
-        // 실시간 콤마 적용 포맷터 함수
+        // 폼 제출 이벤트 차단 및 AJAX 처리
+        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            formData.append('ajax', '1'); // AJAX 식별 플래그
+            
+            try {
+                const res = await fetch(form.action, { method: 'POST', body: formData });
+                if (res.ok) {
+                    // 입력 필드 초기화 (분류나 시간 등은 편의상 유지)
+                    document.getElementById('amount_input').value = '';
+                    document.getElementById('title_input').value = '';
+                    document.getElementById('memo_input').value = '';
+                    document.getElementById('exclude_analysis').checked = false;
+                    
+                    // 토스트 팝업 표출
+                    const toast = document.getElementById('toast-popup');
+                    toast.classList.add('show');
+                    setTimeout(() => toast.classList.remove('show'), 3000);
+                    
+                    // 리스트 전체 초기화 및 새로 불러오기
+                    currentPage = 1;
+                    hasNext = true;
+                    lastRenderedDate = '';
+                    txContainer.innerHTML = '';
+                    window.loadTransactions();
+                }
+            } catch(e) {
+                alert('등록 중 오류가 발생했습니다.');
+            }
+        });
+
         window.formatNumber = function(input) {
             let val = input.value.replace(/[^0-9]/g, '');
             if(val === '') {
@@ -215,8 +254,6 @@
         const loadMoreContainer = document.getElementById('load-more-container');
         const loadMoreBtn = document.getElementById('load-more-btn');
         const loadingText = document.getElementById('loading-text');
-        
-        txContainer.innerHTML = '';
 
         window.loadTransactions = function() {
             if (isLoading || !hasNext) return;

@@ -226,11 +226,8 @@ def home():
     monthly_expense = 0
     cat_names = [c.name for c in categories]
     dow_names = ['월', '화', '수', '목', '금', '토', '일']
-    
     dow_expense_by_cat = {c: [0]*7 for c in cat_names}
     cat_expense_total = {c: 0 for c in cat_names}
-    
-    # 카테고리 내에서 거래자별 지출을 분리 저장하기 위한 딕셔너리
     cat_payer_expense = {c: {} for c in cat_names}
     payer_expense = {}
     
@@ -241,7 +238,6 @@ def home():
             monthly_expense += tx.amount
             c_name = tx.category.name
             
-            # 카테고리별 누적액 및 거래자별 지출 수집
             if c_name in cat_expense_total:
                 cat_expense_total[c_name] += tx.amount
                 dow_idx = tx.datetime_val.weekday()
@@ -253,7 +249,6 @@ def home():
                 
             payer_expense[tx.transactor] = payer_expense.get(tx.transactor, 0) + tx.amount
 
-    # JS와 완벽히 동일한 테마 색상 맵핑 사전 생성 (템플릿에서 누적가로막대 색상 지정용)
     theme_colors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84']
     payer_color_map = {}
     for i, t in enumerate(payer_expense.keys()):
@@ -270,7 +265,7 @@ def home():
                     'budget': c.budget, 
                     'display_budget': display_budget, 
                     'spent': spent,
-                    'payers': cat_payer_expense.get(c.name, {}) # 카테고리 내부 거래자 비율용 추가
+                    'payers': cat_payer_expense.get(c.name, {})
                 })
             
     return render_template('home.html', ledger=ledger, 
@@ -285,6 +280,9 @@ def calendar():
     user = User.query.get(session['user_id'])
     ledger = Ledger.query.get(user.ledger_id)
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
+    
+    # 캘린더에서 내역 추가 바텀시트를 위해 카테고리 정보 함께 넘김
+    categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     
     all_tx = Transaction.query.filter_by(ledger_id=ledger.id).order_by(Transaction.datetime_val.desc()).all()
     txs = [tx for tx in all_tx if tx.datetime_val.year == t_year and tx.datetime_val.month == t_month]
@@ -308,7 +306,8 @@ def calendar():
             'exclude_analysis': tx.exclude_analysis
         })
 
-    return render_template('calendar.html', ledger=ledger, daily_totals=daily_totals, tx_by_date=tx_by_date, today_date=today_date,
+    return render_template('calendar.html', ledger=ledger, current_user=user, categories=categories, 
+                           daily_totals=daily_totals, tx_by_date=tx_by_date, today_date=today_date, now=datetime.now(),
                            t_year=t_year, t_month=t_month, p_y=p_y, p_m=p_m, n_y=n_y, n_m=n_m, current_tab='calendar')
 
 @app.route('/transactions')
@@ -499,6 +498,11 @@ def add_transaction():
     )
     db.session.add(new_tx)
     db.session.commit()
+    
+    # AJAX 요청인 경우 성공 JSON 응답 반환 (페이지 이동 없음)
+    if request.form.get('ajax') == '1':
+        return jsonify({'success': True})
+        
     return redirect(url_for('transactions'))
 
 @app.route('/transaction/<int:tx_id>/edit', methods=['GET', 'POST'])
