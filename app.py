@@ -226,8 +226,12 @@ def home():
     monthly_expense = 0
     cat_names = [c.name for c in categories]
     dow_names = ['월', '화', '수', '목', '금', '토', '일']
+    
     dow_expense_by_cat = {c: [0]*7 for c in cat_names}
     cat_expense_total = {c: 0 for c in cat_names}
+    
+    # 카테고리 내에서 거래자별 지출을 분리 저장하기 위한 딕셔너리
+    cat_payer_expense = {c: {} for c in cat_names}
     payer_expense = {}
     
     for tx in txs:
@@ -236,13 +240,24 @@ def home():
         else:
             monthly_expense += tx.amount
             c_name = tx.category.name
+            
+            # 카테고리별 누적액 및 거래자별 지출 수집
             if c_name in cat_expense_total:
                 cat_expense_total[c_name] += tx.amount
                 dow_idx = tx.datetime_val.weekday()
                 dow_expense_by_cat[c_name][dow_idx] += tx.amount
+                cat_payer_expense[c_name][tx.transactor] = cat_payer_expense[c_name].get(tx.transactor, 0) + tx.amount
             else:
                 cat_expense_total[c_name] = tx.amount
+                cat_payer_expense[c_name] = {tx.transactor: tx.amount}
+                
             payer_expense[tx.transactor] = payer_expense.get(tx.transactor, 0) + tx.amount
+
+    # JS와 완벽히 동일한 테마 색상 맵핑 사전 생성 (템플릿에서 누적가로막대 색상 지정용)
+    theme_colors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84']
+    payer_color_map = {}
+    for i, t in enumerate(payer_expense.keys()):
+        payer_color_map[t] = theme_colors[(i + 4) % len(theme_colors)]
 
     budget_status = []
     for c in categories:
@@ -254,13 +269,15 @@ def home():
                     'name': c.name, 
                     'budget': c.budget, 
                     'display_budget': display_budget, 
-                    'spent': spent
+                    'spent': spent,
+                    'payers': cat_payer_expense.get(c.name, {}) # 카테고리 내부 거래자 비율용 추가
                 })
             
     return render_template('home.html', ledger=ledger, 
                            monthly_income=monthly_income, monthly_expense=monthly_expense,
                            cat_expense_total=cat_expense_total, dow_expense_by_cat=dow_expense_by_cat,
                            payer_expense=payer_expense, budget_status=budget_status,
+                           payer_color_map=payer_color_map,
                            t_year=t_year, t_month=t_month, p_y=p_y, p_m=p_m, n_y=n_y, n_m=n_m, current_tab='home')
 
 @app.route('/calendar')
@@ -424,7 +441,6 @@ def set_budget():
     user = User.query.get(session['user_id'])
     ledger = Ledger.query.get(user.ledger_id)
     
-    # 예산 콤마 제거 후 정수 변환
     tb_str = request.form.get('total_budget', '').replace(',', '')
     ledger.monthly_budget = int(tb_str) if tb_str.isdigit() else 0
     
@@ -442,7 +458,6 @@ def set_budget():
 @app.route('/transaction', methods=['POST'])
 def add_transaction():
     user = User.query.get(session['user_id'])
-    # 금액 콤마 제거 후 정수 변환
     amt_str = request.form.get('amount', '').replace(',', '')
     amount = int(amt_str) if amt_str.isdigit() else 0
     
@@ -499,7 +514,6 @@ def edit_transaction(tx_id):
         tx.title = request.form.get('title')
         tx.memo = request.form.get('memo', '')
         
-        # 금액 콤마 제거 후 정수 변환
         amt_str = request.form.get('amount', '').replace(',', '')
         tx.amount = int(amt_str) if amt_str.isdigit() else 0
         

@@ -22,14 +22,17 @@
     {% if ledger.monthly_budget > 0 or monthly_expense > 0 or budget_status %}
     <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
         
-        <!-- 전체 예산 -->
-        {% if ledger.monthly_budget > 0 or monthly_expense > 0 %}
-        {% set disp_total_budget = ledger.monthly_budget if ledger.monthly_budget > 0 else monthly_expense %}
-        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">전체 예산 ({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(disp_total_budget) }})</div>
-        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
-            {% set t_percent = (monthly_expense / disp_total_budget * 100) if disp_total_budget > 0 else 0 %}
-            <div style="height: 100%; width: {{ t_percent if t_percent <= 100 else 100 }}%; background: {% if ledger.monthly_budget > 0 and monthly_expense > ledger.monthly_budget %}#fe493d{% else %}#06a96c{% endif %};"></div>
+        <!-- 전체 예산 요약 -->
+        {% if ledger.monthly_budget > 0 %}
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
+            전체 예산 <span style="{% if monthly_expense > ledger.monthly_budget %}color: #fe493d;{% endif %}">({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(ledger.monthly_budget) }})</span>
         </div>
+        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
+            {% set t_percent = (monthly_expense / ledger.monthly_budget * 100) %}
+            <div style="height: 100%; width: {{ t_percent if t_percent <= 100 else 100 }}%; background: {% if monthly_expense > ledger.monthly_budget %}#fe493d{% else %}#06a96c{% endif %};"></div>
+        </div>
+        {% else %}
+        <div style="font-size: 14px; font-weight: 700; margin-bottom: 16px;">총 지출 ({{ '{:,}'.format(monthly_expense) }})</div>
         {% endif %}
         
         <!-- 1. 예산이 설정된 카테고리 (기본 노출) -->
@@ -37,11 +40,17 @@
         <div style="margin-bottom: 8px;">
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
                 <span>{{ b.name }}</span>
-                <span>{{ '{:,}'.format(b.spent) }} / {{ '{:,}'.format(b.display_budget) }}</span>
+                <span style="{% if b.spent > b.budget %}color: #fe493d; font-weight: 700;{% endif %}">
+                    {{ '{:,}'.format(b.spent) }} / {{ '{:,}'.format(b.budget) }}
+                </span>
             </div>
-            <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden;">
-                {% set percent = (b.spent / b.display_budget * 100) if b.display_budget > 0 else 0 %}
-                <div style="height: 100%; width: {{ percent if percent <= 100 else 100 }}%; background: {% if b.budget > 0 and b.spent > b.budget %}#fe493d{% else %}#06a96c{% endif %};"></div>
+            <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
+                {% set max_val = b.spent if b.spent > b.budget else b.budget %}
+                {% for payer, p_amount in b.payers.items() %}
+                    {% if max_val > 0 %}
+                    <div style="height: 100%; width: {{ (p_amount / max_val * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                    {% endif %}
+                {% endfor %}
             </div>
         </div>
         {% endfor %}
@@ -54,12 +63,14 @@
             <div style="margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
                     <span>{{ b.name }}</span>
-                    <span>{{ '{:,}'.format(b.spent) }} / {{ '{:,}'.format(b.display_budget) }}</span>
+                    <span>{{ '{:,}'.format(b.spent) }}</span>
                 </div>
-                <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden;">
-                    {% set percent = (b.spent / b.display_budget * 100) if b.display_budget > 0 else 0 %}
-                    <!-- 예산이 없으므로 초과할 일이 없어 무조건 정상(초록색)으로 표출 -->
-                    <div style="height: 100%; width: {{ percent if percent <= 100 else 100 }}%; background: #06a96c;"></div>
+                <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
+                    {% for payer, p_amount in b.payers.items() %}
+                        {% if b.spent > 0 %}
+                        <div style="height: 100%; width: {{ (p_amount / b.spent * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                        {% endif %}
+                    {% endfor %}
                 </div>
             </div>
             {% endfor %}
@@ -101,7 +112,6 @@
 
 <script>
     {
-        // 예산 미설정 토글 기능
         window.toggleExtraBudget = function() {
             const container = document.getElementById('extra-budget-container');
             const btn = document.getElementById('toggle-budget-btn');
@@ -114,13 +124,14 @@
             }
         };
 
-        // SPA 비동기 렌더링 딜레이를 위한 setTimeout
         setTimeout(() => {
             window.appCharts = window.appCharts || {};
             if(window.appCharts.catChart) window.appCharts.catChart.destroy();
             if(window.appCharts.payerChart) window.appCharts.payerChart.destroy();
             if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
 
+            // app.py에서 내려준 색상 맵핑으로 동기화 처리
+            const payerColorMap = {{ payer_color_map | tojson | safe }};
             const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
 
             const catExpense = {{ cat_expense_total | tojson | safe }};
@@ -139,7 +150,7 @@
             const payerExpense = {{ payer_expense | tojson | safe }};
             const payerLabels = Object.keys(payerExpense).filter(k => payerExpense[k] > 0);
             const payerData = payerLabels.map(k => payerExpense[k]);
-            const payerColors = payerLabels.map((_, i) => themeColors[(i + 4) % themeColors.length]);
+            const payerColors = payerLabels.map(k => payerColorMap[k]);
             
             window.appCharts.payerChart = new Chart(document.getElementById('payerChart'), { type: 'pie', data: { labels: payerLabels, datasets: [{ data: payerData, backgroundColor: payerColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
         }, 50);
