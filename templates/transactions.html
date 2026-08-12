@@ -9,13 +9,18 @@
     dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
     dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
     
-    /* 토스트 팝업 CSS */
     #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     #toast-popup.show { opacity: 1; }
+
+    /* 수정 팝업 바텀시트 CSS */
+    #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
+    #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
+    #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
+    #edit-bottom-sheet.active { transform: translateY(0); }
 </style>
 
-<!-- 토스트 팝업 컨테이너 -->
-<div id="toast-popup">내역이 성공적으로 등록되었습니다.</div>
+<!-- 토스트 팝업 -->
+<div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
 
 <div class="month-selector">
     <a href="/transactions?year={{ p_y }}&month={{ p_m }}">◀</a> 
@@ -29,7 +34,6 @@
         <a href="/search" class="chip no-spa" style="text-decoration: none;">🔍 내역 검색</a>
     </div>
     
-    <!-- 폼 ID 부여 및 AJAX 제출 연결 -->
     <form id="tx-add-form" action="/transaction" method="POST">
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
             <button type="button" id="btn-expense" class="btn-tab active" onclick="window.setTxType('지출')">지출</button>
@@ -85,6 +89,64 @@
     </form>
 </div>
 
+<!-- 내역 수정 바텀시트 -->
+<div id="edit-sheet-overlay" onclick="window.closeEditSheet()"></div>
+<div id="edit-bottom-sheet">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">내역 수정</h3>
+        <button type="button" class="chip" onclick="window.closeEditSheet()" style="background: none; color: var(--color-muted); font-size: 18px; padding: 0;">✕</button>
+    </div>
+
+    <form id="tx-edit-form" method="POST">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button type="button" id="edit-btn-expense" class="btn-tab active" onclick="window.setEditTxType('지출')">지출</button>
+            <button type="button" id="edit-btn-income" class="btn-tab" onclick="window.setEditTxType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="edit_tx_type" value="지출">
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" oninput="window.formatNumber(this)" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="flex: 0 0 100px;">
+                <select name="transactor" id="edit_transactor" required class="input-field">
+                    {% for u in ledger.users %}<option value="{{ u.nickname }}">{{ u.nickname }}</option>{% endfor %}
+                    <option value="함께">함께</option>
+                </select>
+            </div>
+            <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper">
+                <select name="category_id" id="edit_category_select" class="input-field">
+                    <option value="">미분류</option>
+                    {% for cat in categories if cat.name != '미분류' %}
+                        <option value="{{ cat.id }}">{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="input-wrapper" style="flex: 0 0 140px;">
+                <input type="date" name="date" id="edit_date_input" class="input-field" required>
+            </div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 12px;">
+            <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field"></div>
+            <input type="hidden" name="time" id="edit_time_input">
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" id="edit_exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
+            </label>
+        </div>
+        
+        <button type="submit" class="btn-action" style="width: 100%;">수정 완료</button>
+    </form>
+</div>
+
 <dialog id="time-dialog">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -116,46 +178,13 @@
 
 <script>
     {
-        // 폼 제출 이벤트 차단 및 AJAX 처리
-        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            formData.append('ajax', '1'); // AJAX 식별 플래그
-            
-            try {
-                const res = await fetch(form.action, { method: 'POST', body: formData });
-                if (res.ok) {
-                    // 입력 필드 초기화 (분류나 시간 등은 편의상 유지)
-                    document.getElementById('amount_input').value = '';
-                    document.getElementById('title_input').value = '';
-                    document.getElementById('memo_input').value = '';
-                    document.getElementById('exclude_analysis').checked = false;
-                    
-                    // 토스트 팝업 표출
-                    const toast = document.getElementById('toast-popup');
-                    toast.classList.add('show');
-                    setTimeout(() => toast.classList.remove('show'), 3000);
-                    
-                    // 리스트 전체 초기화 및 새로 불러오기
-                    currentPage = 1;
-                    hasNext = true;
-                    lastRenderedDate = '';
-                    txContainer.innerHTML = '';
-                    window.loadTransactions();
-                }
-            } catch(e) {
-                alert('등록 중 오류가 발생했습니다.');
-            }
-        });
+        // 전역 데이터 저장소
+        window.txDataStore = {};
 
         window.formatNumber = function(input) {
             let val = input.value.replace(/[^0-9]/g, '');
-            if(val === '') {
-                input.value = '';
-            } else {
-                input.value = parseInt(val, 10).toLocaleString();
-            }
+            if(val === '') input.value = '';
+            else input.value = parseInt(val, 10).toLocaleString();
         };
 
         window.setTxType = function(type) {
@@ -176,18 +205,12 @@
             document.getElementById('time-dialog').close();
         };
 
-        window.openCatModal = function() {
-            document.getElementById('cat-dialog').showModal();
-            window.loadCategories();
-        };
-
+        // 카테고리 모달 로직
+        window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
         window.loadCategories = async function() {
             const res = await fetch('/api/categories');
             const cats = await res.json();
-            
             const editableCats = cats.filter(c => c.name !== '미분류');
-            const uncategorized = cats.find(c => c.name === '미분류');
-            
             const list = document.getElementById('cat-list');
             list.innerHTML = editableCats.map(c => `
                 <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-line); align-items: center;">
@@ -206,49 +229,21 @@
             `).join('');
 
             const select = document.getElementById('category_select');
-            const selectedValue = select.value;
+            const editSelect = document.getElementById('edit_category_select');
+            const val = select.value;
+            const eval = editSelect ? editSelect.value : '';
             
-            let selectHtml = '';
-            if (uncategorized) selectHtml += `<option value="${uncategorized.id}">미분류</option>`;
-            else selectHtml += `<option value="">미분류</option>`;
-            
-            selectHtml += editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            select.innerHTML = selectHtml;
-            select.value = selectedValue;
+            let selectHtml = `<option value="${cats.find(c=>c.name==='미분류')?cats.find(c=>c.name==='미분류').id:''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            select.innerHTML = selectHtml; select.value = val;
+            if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = eval; }
         };
+        window.addCat = async function() { const name = document.getElementById('new_cat_name').value; if (!name) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); document.getElementById('new_cat_name').value = ''; window.loadCategories(); };
+        window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
+        window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
+        window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
+        window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
-        window.addCat = async function() {
-            const name = document.getElementById('new_cat_name').value;
-            if (!name) return;
-            await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
-            document.getElementById('new_cat_name').value = '';
-            window.loadCategories();
-        };
-
-        window.enableEdit = function(id) {
-            document.getElementById(`cat-span-${id}`).style.display = 'none';
-            document.getElementById(`cat-name-${id}`).style.display = 'inline-block';
-            document.getElementById(`cat-edit-btn-${id}`).style.display = 'none';
-            document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block';
-        };
-
-        window.saveCat = async function(id) {
-            const name = document.getElementById(`cat-name-${id}`).value;
-            await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
-            window.loadCategories();
-        };
-
-        window.deleteCat = async function(id) {
-            if (!confirm('삭제하시겠습니까?')) return;
-            await fetch(`/api/category/${id}/delete`, { method: 'POST' });
-            window.loadCategories();
-        };
-
-        window.moveCat = async function(id, dir) {
-            await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})});
-            window.loadCategories();
-        };
-
+        // AJAX 리스트 스크롤 로딩
         let currentPage = 1, hasNext = true, isLoading = false, lastRenderedDate = '';
         const txContainer = document.getElementById('tx-container');
         const loadMoreContainer = document.getElementById('load-more-container');
@@ -257,20 +252,19 @@
 
         window.loadTransactions = function() {
             if (isLoading || !hasNext) return;
-            isLoading = true; 
-            loadMoreBtn.innerText = '불러오는 중...';
-            loadMoreBtn.style.display = 'inline-block';
-            loadingText.style.display = 'none';
+            isLoading = true; loadMoreBtn.innerText = '불러오는 중...'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none';
 
             fetch(`/api/transactions?page=${currentPage}`)
                 .then(res => res.json())
                 .then(data => {
                     data.transactions.forEach(tx => {
+                        window.txDataStore[tx.id] = tx;
                         if (tx.date !== lastRenderedDate) {
                             txContainer.innerHTML += `<div class="date-divider">${tx.date}</div>`;
                             lastRenderedDate = tx.date;
                         }
-                        const isIncome = tx.tx_type === '수입', color = isIncome ? 'var(--color-primary)' : '#fe493d', sign = isIncome ? '+' : '-';
+                        const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
+                        const sign = tx.tx_type === '수입' ? '+' : '-';
                         const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
                         const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
 
@@ -282,40 +276,92 @@
                                 </div>
                                 <div style="text-align: right; margin-left: 12px; min-width: 80px;">
                                     <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
-                                    <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center; line-height: 1;">
-                                        <a href="/transaction/${tx.id}/edit" class="no-spa" style="font-size: 12px; color: var(--color-muted); text-decoration: none;">수정</a>
+                                    <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                                        <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
                                         <span style="color: var(--color-line);">|</span>
-                                        <form action="/transaction/${tx.id}/delete" method="POST" style="display: flex; align-items: center; margin: 0;" onsubmit="return confirm('정말 삭제하시겠습니까?');">
-                                            <button type="submit" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
-                                        </form>
+                                        <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
                                     </div>
                                 </div>
                             </div>`;
                     });
                     
-                    hasNext = data.has_next; 
-                    currentPage++; 
-                    isLoading = false;
-
-                    if (hasNext) {
-                        loadMoreBtn.innerText = '더보기';
-                        loadMoreBtn.style.display = 'inline-block';
-                        loadingText.style.display = 'none';
-                    } else {
-                        loadMoreBtn.style.display = 'none';
-                        if (currentPage > 2 || data.transactions.length > 0) {
-                            loadingText.style.display = 'block';
-                        }
-                    }
+                    hasNext = data.has_next; currentPage++; isLoading = false;
+                    if (hasNext) { loadMoreBtn.innerText = '더보기'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none'; } 
+                    else { loadMoreBtn.style.display = 'none'; if (currentPage > 2 || data.transactions.length > 0) loadingText.style.display = 'block'; }
                 });
         };
 
         if(window.txObserver) window.txObserver.disconnect();
-        window.txObserver = new IntersectionObserver((entries) => { 
-            if (entries[0].isIntersecting) window.loadTransactions(); 
-        }, { rootMargin: '100px' });
-        
+        window.txObserver = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) window.loadTransactions(); }, { rootMargin: '100px' });
         if(loadMoreContainer) window.txObserver.observe(loadMoreContainer);
+
+        // 내역 등록 (AJAX)
+        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            try {
+                const res = await fetch(e.target.action, { method: 'POST', body: fd });
+                if (res.ok) {
+                    document.getElementById('amount_input').value = '';
+                    document.getElementById('title_input').value = '';
+                    document.getElementById('memo_input').value = '';
+                    document.getElementById('exclude_analysis').checked = false;
+                    
+                    const t = document.getElementById('toast-popup'); t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
+                    
+                    txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+                }
+            } catch(e) { alert('오류가 발생했습니다.'); }
+        });
+
+        // 수정/삭제 바텀시트 제어
+        window.setEditTxType = function(type) {
+            document.getElementById('edit_tx_type').value = type;
+            if (type === '지출') { document.getElementById('edit-btn-expense').classList.add('active'); document.getElementById('edit-btn-income').classList.remove('active'); } 
+            else { document.getElementById('edit-btn-income').classList.add('active'); document.getElementById('edit-btn-expense').classList.remove('active'); }
+        };
+
+        window.openEditSheet = function(id) {
+            const tx = window.txDataStore[id];
+            document.getElementById('tx-edit-form').action = `/transaction/${tx.id}/edit`;
+            window.setEditTxType(tx.tx_type);
+            document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
+            document.getElementById('edit_transactor').value = tx.transactor;
+            document.getElementById('edit_title_input').value = tx.title;
+            document.getElementById('edit_category_select').value = tx.category_id || "";
+            document.getElementById('edit_date_input').value = tx.date;
+            document.getElementById('edit_time_input').value = tx.time;
+            document.getElementById('edit_memo_input').value = tx.memo || "";
+            document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
+            
+            document.getElementById('edit-sheet-overlay').classList.add('active');
+            document.getElementById('edit-bottom-sheet').classList.add('active');
+        };
+
+        window.closeEditSheet = function() {
+            document.getElementById('edit-sheet-overlay').classList.remove('active');
+            document.getElementById('edit-bottom-sheet').classList.remove('active');
+        };
+
+        document.getElementById('tx-edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            const res = await fetch(e.target.action, {method: 'POST', body: fd});
+            if(res.ok) {
+                window.closeEditSheet();
+                const t = document.getElementById('toast-popup'); t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
+                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+            }
+        });
+
+        window.deleteTx = async function(id) {
+            if(!confirm('정말 삭제하시겠습니까?')) return;
+            let fd = new FormData(); fd.append('ajax', '1');
+            let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
+            if(res.ok) {
+                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+            }
+        };
     }
 </script>
 {% endblock %}
