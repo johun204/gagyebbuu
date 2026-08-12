@@ -1,5 +1,6 @@
 import os
 import time
+import calendar as py_calendar
 
 # Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
 os.environ['TZ'] = 'Asia/Seoul'
@@ -281,9 +282,7 @@ def calendar():
     ledger = Ledger.query.get(user.ledger_id)
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
     
-    # 캘린더에서 내역 추가 바텀시트를 위해 카테고리 정보 함께 넘김
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    
     all_tx = Transaction.query.filter_by(ledger_id=ledger.id).order_by(Transaction.datetime_val.desc()).all()
     txs = [tx for tx in all_tx if tx.datetime_val.year == t_year and tx.datetime_val.month == t_month]
     
@@ -306,8 +305,13 @@ def calendar():
             'exclude_analysis': tx.exclude_analysis
         })
 
+    # 달력 매트릭스 계산 (0: 일요일, 6: 토요일을 위해 firstweekday=6 설정)
+    cal = py_calendar.Calendar(firstweekday=6)
+    month_days = cal.monthdayscalendar(t_year, t_month)
+
     return render_template('calendar.html', ledger=ledger, current_user=user, categories=categories, 
                            daily_totals=daily_totals, tx_by_date=tx_by_date, today_date=today_date, now=datetime.now(),
+                           month_days=month_days,
                            t_year=t_year, t_month=t_month, p_y=p_y, p_m=p_m, n_y=n_y, n_m=n_m, current_tab='calendar')
 
 @app.route('/transactions')
@@ -499,7 +503,6 @@ def add_transaction():
     db.session.add(new_tx)
     db.session.commit()
     
-    # AJAX 요청인 경우 성공 JSON 응답 반환 (페이지 이동 없음)
     if request.form.get('ajax') == '1':
         return jsonify({'success': True})
         

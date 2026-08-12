@@ -21,7 +21,7 @@
     #toast-popup.show { opacity: 1; }
 
     /* 내역 리스트 CSS */
-    .cal-date-divider { font-size: 14px; font-weight: 700; color: var(--color-secondary); margin: 16px 0 8px 0; border-bottom: 2px solid var(--color-line); padding-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; }
+    .cal-date-divider { font-size: 14px; font-weight: 700; color: var(--color-secondary); margin: 16px 0 8px 0; border-bottom: 2px solid var(--color-line); padding-bottom: 4px; display: flex; justify-content: space-between; align-items: baseline; transition: background-color 1s ease; }
     .cal-tx-item { padding: 12px 0; border-bottom: 1px solid var(--color-line); display: flex; justify-content: space-between; align-items: center; }
     .cal-tx-item:last-child { border-bottom: none; }
 </style>
@@ -41,13 +41,51 @@
     <div id="calendar-track">
         <!-- 메인 콘텐츠 영역 -->
         <div class="calendar-page-content" id="calendar-page-content">
+            
+            <!-- 달력 Grid 영역 -->
+            <div class="card" style="padding: 16px; margin-bottom: 8px;">
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-bottom: 12px;">
+                    <div style="color: #fe493d;">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: #0abde3;">토</div>
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; row-gap: 8px;">
+                    {% for week in month_days %}
+                        {% for d in week %}
+                            {% if d == 0 %}
+                                <div style="min-height: 50px;"></div>
+                            {% else %}
+                                {% set d_str = '%04d-%02d-%02d' | format(t_year, t_month, d) %}
+                                {% set totals = daily_totals.get(d_str, {'income': 0, 'expense': 0}) %}
+                                {% set is_today = (d_str == today_date) %}
+                                {% set day_color = 'var(--color-foreground)' %}
+                                {% if loop.index0 == 0 %}{% set day_color = '#fe493d' %}{% endif %} <!-- Sun -->
+                                {% if loop.index0 == 6 %}{% set day_color = '#0abde3' %}{% endif %} <!-- Sat -->
+                                
+                                <div style="min-height: 50px; display: flex; flex-direction: column; align-items: center; cursor: pointer; text-align: center; overflow: hidden;" onclick="window.scrollToDate('{{ d_str }}')">
+                                    <div style="font-size: 13px; font-weight: 500; margin-bottom: 2px; {% if is_today %}background: var(--color-action); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;{% else %}color: {{ day_color }};{% endif %}">
+                                        {{ d }}
+                                    </div>
+                                    
+                                    <div style="color: var(--color-primary); font-size: 9px; font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; width: 100%; white-space: nowrap;">
+                                        {% if totals.income > 0 %}+{% if totals.income >= 10000 %}{{ (totals.income // 10000) }}만{% else %}{{ '{:,}'.format(totals.income) }}{% endif %}{% endif %}
+                                    </div>
+                                    <div style="color: #fe493d; font-size: 9px; font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; width: 100%; white-space: nowrap;">
+                                        {% if totals.expense > 0 %}-{% if totals.expense >= 10000 %}{{ (totals.expense // 10000) }}만{% else %}{{ '{:,}'.format(totals.expense) }}{% endif %}{% endif %}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- 하단 내역 리스트 영역 -->
             <div class="card" style="padding: 16px;">
                 {% if not tx_by_date %}
                 <div style="text-align: center; color: var(--color-muted); padding: 40px 0;">해당 월의 내역이 없습니다.</div>
                 {% endif %}
                 
                 {% for date_str, txs in tx_by_date.items() %}
-                <div class="cal-date-divider">
+                <div id="date-div-{{ date_str }}" class="cal-date-divider" style="padding: 4px; border-radius: 4px;">
                     <span>{{ date_str }}</span>
                     <span style="font-size: 12px; font-weight: 500;">
                         {% set d_in = daily_totals[date_str]['income'] %}
@@ -137,6 +175,16 @@
 
 <script>
     {
+        // 캘린더 일자 클릭 시 리스트로 부드럽게 스크롤
+        window.scrollToDate = function(dateStr) {
+            const el = document.getElementById('date-div-' + dateStr);
+            if(el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.style.backgroundColor = 'rgba(6, 169, 108, 0.15)';
+                setTimeout(() => { el.style.backgroundColor = 'transparent'; }, 1000);
+            }
+        };
+
         // 바텀시트 동작 제어
         window.openBottomSheet = function() {
             document.getElementById('bottom-sheet-overlay').classList.add('active');
