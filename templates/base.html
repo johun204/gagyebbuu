@@ -53,21 +53,19 @@
         .flex-row > .input-wrapper { flex: 1 1 130px; box-sizing: border-box; min-width: 0; }
         
         .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
-        .month-selector h3 { font-size: 20px; font-weight: 700; }
+        .month-selector h3 { font-size: 20px; font-weight: 700; cursor: pointer; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
         .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
 
         dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
         dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
-        dialog input[type="time"], dialog input[type="date"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+        dialog input[type="time"], dialog input[type="date"], dialog input[type="month"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
 
-        /* 고급 스켈레톤 로딩 UI CSS */
         .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
         .skeleton-text.short { width: 50%; }
         .skeleton-circle { width: 40px; height: 40px; border-radius: 50%; }
 
-        /* 슬라이딩 아코디언 스타일 */
         .slide-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease, margin-top 0.3s ease, opacity 0.3s ease; opacity: 0; margin-top: 0; }
         .slide-wrapper.open { grid-template-rows: 1fr; opacity: 1; margin-top: 16px; }
         .slide-inner { overflow: hidden; }
@@ -88,8 +86,42 @@
     </div>
     {% endif %}
 
+    <!-- 공통 월 선택 다이얼로그 -->
+    <dialog id="global-month-picker">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+            <h3 style="font-size: 18px; font-weight: 700;">월 이동</h3>
+            <button type="button" class="chip" onclick="document.getElementById('global-month-picker').close()" style="background:none;">닫기</button>
+        </div>
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="month" id="global_month_input" class="input-field"></div>
+        </div>
+        <button type="button" class="btn-action" style="width:100%; margin-top: 12px;" onclick="window.jumpToMonth()">이동하기</button>
+    </dialog>
+
     <script>
-        // PWA Service Worker 등록 (오프라인 캐싱 지원)
+        // 전역 요일 변환 유틸리티
+        window.getDowStr = function(dateStr) {
+            const days = ['일','월','화','수','목','금','토'];
+            const d = new Date(dateStr + 'T00:00:00');
+            return `${dateStr} (${days[d.getDay()]})`;
+        };
+
+        // 전역 다이얼로그 이동 로직
+        window.openMonthPicker = function(currentY, currentM) {
+            let mStr = currentM.toString().padStart(2, '0');
+            document.getElementById('global_month_input').value = `${currentY}-${mStr}`;
+            document.getElementById('global-month-picker').showModal();
+        };
+
+        window.jumpToMonth = function() {
+            let val = document.getElementById('global_month_input').value;
+            if(!val) return;
+            let parts = val.split('-');
+            let path = window.location.pathname;
+            document.getElementById('global-month-picker').close();
+            navigate(`${path}?year=${parts[0]}&month=${parseInt(parts[1], 10)}`);
+        };
+
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
@@ -103,7 +135,6 @@
             if(arrow) arrow.classList.toggle('open');
         };
 
-        // 페이지별 디테일 스켈레톤 설계 (소제목과 화면별 구조를 뚜렷하게 반영)
         const skeletonHome = `
             <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
             <div class="card">
@@ -184,7 +215,6 @@
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
             
-            // 페이지 URL에 맞춰 섬세하게 설계된 스켈레톤 즉각 표출
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
             
             try {
@@ -239,7 +269,6 @@
             const formData = new FormData(form);
             const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;
             
-            // 폼 전환/제출 중에도 구조화된 스켈레톤 반영
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
             
             try {

@@ -1,20 +1,18 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    /* 무한 스와이프용 슬라이드 뷰 구조 */
     #home-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
     #home-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
     .home-slide { width: 33.333%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
 </style>
 
-<!-- 상단 월 선택기 -->
 <div class="month-selector">
     <a href="javascript:void(0)" onclick="window.shiftHomeMonth(-1)" class="no-spa">◀</a> 
-    <h3 id="home-month-header">{{ t_year }}년 {{ t_month }}월</h3>
+    <!-- 월 선택 다이얼로그 연동 -->
+    <h3 id="home-month-header" onclick="window.openMonthPicker(window.currentHomeY || {{ t_year }}, window.currentHomeM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월</h3>
     <a href="javascript:void(0)" onclick="window.shiftHomeMonth(1)" class="no-spa">▶</a>
 </div>
 
-<!-- 홈 슬라이더 영역 -->
 <div id="home-slider-wrapper">
     <div id="home-slider">
         <div id="slide-home-prev" class="home-slide"></div>
@@ -23,7 +21,6 @@
     </div>
 </div>
 
-<!-- 파이썬 템플릿 변수를 JS 글로벌로 넘김 -->
 <script>
     window.initialHomeData = {{ initial_data | tojson | safe }};
     window.currentHomeY = {{ t_year }};
@@ -46,7 +43,6 @@
             return data;
         };
 
-        // 홈 화면 HTML DOM 렌더링 함수
         window.renderHomeSlide = function(data) {
             let uid = `${data.year}_${data.month}`;
             
@@ -54,7 +50,6 @@
             if(data.ledger_budget > 0 || data.monthly_expense > 0 || data.budget_status.length > 0) {
                 budgetHtml += `<div style="padding-top: 16px; border-top: 1px solid var(--color-line);">`;
                 
-                // 전체 예산
                 if (data.ledger_budget > 0) {
                     let max_total = Math.max(data.monthly_expense, data.ledger_budget);
                     let colorWarning = data.monthly_expense > data.ledger_budget ? 'color: #fe493d;' : '';
@@ -85,7 +80,6 @@
                     budgetHtml += `</div>`;
                 }
                 
-                // 카테고리별 예산
                 let hasExtra = false;
                 let extraHtml = '';
                 
@@ -136,7 +130,6 @@
                     `;
                 }
 
-                // 범례
                 let payers = Object.keys(data.payer_color_map);
                 if(payers.length > 0) {
                     budgetHtml += `
@@ -190,7 +183,6 @@
             return html;
         };
 
-        // Chart.js 초기화 함수 (DOM 삽입 후 호출)
         window.initHomeCharts = function(data) {
             let uid = `${data.year}_${data.month}`;
             if(window.appCharts && window.appCharts['dow_'+uid]) window.appCharts['dow_'+uid].destroy();
@@ -216,7 +208,6 @@
             }
         };
 
-        // 초기 구동 세팅
         window.allHomeData[`${window.currentHomeY}-${window.currentHomeM}`] = window.initialHomeData;
         document.getElementById('slide-home-curr').innerHTML = window.renderHomeSlide(window.initialHomeData);
         window.initHomeCharts(window.initialHomeData);
@@ -226,7 +217,6 @@
         window.fetchHomeData(p.y, p.m).then(d => { document.getElementById('slide-home-prev').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
         window.fetchHomeData(n.y, n.m).then(d => { document.getElementById('slide-home-next').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
 
-        // 무한 스와이프 제어 함수
         window.shiftHomeMonth = async function(dir) {
             let slider = document.getElementById('home-slider');
             slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
@@ -259,19 +249,35 @@
             }, 300);
         };
 
-        // 홈 터치 제스처 연동
+        // 개선: 수직 스크롤 간섭 방지를 위한 임계값(Threshold) 로직 적용
         const view = document.getElementById('home-slider-wrapper');
-        let startX = 0, diffX = 0, isSwiping = false;
+        let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
         
         view.addEventListener('touchstart', e => {
             startX = e.touches[0].clientX;
-            isSwiping = true; diffX = 0;
+            startY = e.touches[0].clientY;
+            isSwiping = true;
+            isScrolling = false;
+            diffX = 0;
             document.getElementById('home-slider').style.transition = 'none';
         }, {passive: true});
         
         view.addEventListener('touchmove', e => {
             if(!isSwiping) return;
-            diffX = e.touches[0].clientX - startX;
+            let currentX = e.touches[0].clientX;
+            let currentY = e.touches[0].clientY;
+            diffX = currentX - startX;
+            let diffY = currentY - startY;
+            
+            // 처음 움직일 때 Y축 변화량이 크면 수직 스크롤로 판정하여 스와이프 차단
+            if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
+                isScrolling = true;
+            }
+            if (isScrolling) {
+                isSwiping = false;
+                return;
+            }
+            
             let cw = view.offsetWidth;
             let percent = (diffX / cw) * 33.333;
             document.getElementById('home-slider').style.transform = `translateX(${-33.333 + percent}%)`;
@@ -280,8 +286,8 @@
         view.addEventListener('touchend', e => {
             if(!isSwiping) return;
             isSwiping = false;
-            if (diffX < -50) window.shiftHomeMonth(1);
-            else if (diffX > 50) window.shiftHomeMonth(-1);
+            if (diffX < -60) window.shiftHomeMonth(1);
+            else if (diffX > 60) window.shiftHomeMonth(-1);
             else {
                 document.getElementById('home-slider').style.transition = 'transform 0.3s ease';
                 document.getElementById('home-slider').style.transform = 'translateX(-33.333%)';

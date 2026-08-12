@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    /* 입력 필드 오버플로우 방지 (iPhone 등 작은 화면 대응) */
+    /* 입력 폼 관련 스타일 (iPhone 터짐 방지 반영) */
     input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
     .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
 
@@ -10,29 +10,34 @@
     .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
-    dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
-    dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
     
     #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     #toast-popup.show { opacity: 1; }
 
+    /* 바텀시트 CSS */
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
     #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     #edit-bottom-sheet.active { transform: translateY(0); }
+
+    /* 내역 탭의 리스트 스와이프 컨테이너용 CSS */
+    #tx-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
+    #tx-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
+    .tx-slide { width: 33.333%; flex-shrink: 0; box-sizing: border-box; }
 </style>
 
-<!-- 전역 미분류 카테고리 세팅 (수정/등록 폼 매핑용) -->
 {% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
 
 <div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
 
+<!-- 월 선택기: 전역 팝업 연결 & 스와이프 기능 함수 연동 -->
 <div class="month-selector">
-    <a href="/transactions?year={{ p_y }}&month={{ p_m }}">◀</a> 
-    <h3>{{ t_year }}년 {{ t_month }}월 내역</h3>
-    <a href="/transactions?year={{ n_y }}&month={{ n_m }}">▶</a>
+    <a href="javascript:void(0)" onclick="window.shiftTxMonth(-1)" class="no-spa">◀</a> 
+    <h3 id="tx-month-header" onclick="window.openMonthPicker(window.currentTxY || {{ t_year }}, window.currentTxM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월 내역</h3>
+    <a href="javascript:void(0)" onclick="window.shiftTxMonth(1)" class="no-spa">▶</a>
 </div>
 
+<!-- 새 내역 등록 폼 (이 영역은 스와이프에 딸려가지 않고 상단에 고정) -->
 <div class="card" style="margin-bottom: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3>
@@ -94,7 +99,16 @@
     </form>
 </div>
 
-<!-- 내역 수정 바텀시트 -->
+<!-- 내역 리스트 스와이프 영역 (입력 폼 하단) -->
+<div id="tx-slider-wrapper">
+    <div id="tx-slider">
+        <div id="slide-tx-prev" class="tx-slide"></div>
+        <div id="slide-tx-curr" class="tx-slide"></div>
+        <div id="slide-tx-next" class="tx-slide"></div>
+    </div>
+</div>
+
+<!-- 수정용 통합 바텀시트 -->
 <div id="edit-sheet-overlay" onclick="window.closeEditSheet()"></div>
 <div id="edit-bottom-sheet">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -132,18 +146,15 @@
                     {% endfor %}
                 </select>
             </div>
-        </div>
-        
-        <div class="flex-row">
-            <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <input type="date" name="date" id="edit_date_input" class="input-field" required style="flex: 1;">
-                <input type="hidden" name="time" id="edit_time_input">
-                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" id="time-display-btn-edit" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
+            <div class="input-wrapper" style="flex: 0 0 140px;">
+                <input type="date" name="date" id="edit_date_input" class="input-field" required style="width: 100%;">
             </div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
             <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field"></div>
+            <input type="hidden" name="time" id="edit_time_input">
+            <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
         </div>
         
         <div class="flex-row" style="margin-bottom: 16px;">
@@ -156,7 +167,6 @@
     </form>
 </div>
 
-<!-- 시간 설정 다이얼로그 (등록용) -->
 <dialog id="time-dialog">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -168,7 +178,6 @@
     <button type="button" class="btn-action" style="width:100%;" onclick="window.setTime()">확인</button>
 </dialog>
 
-<!-- 시간 설정 다이얼로그 (수정용) -->
 <dialog id="time-dialog-edit">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 변경</h3>
@@ -192,22 +201,221 @@
     <div id="cat-list" style="max-height: 300px; overflow-y: auto;"></div>
 </dialog>
 
-<div id="tx-container"></div>
-<div id="load-more-container" style="text-align: center; padding: 20px;">
-    <button id="load-more-btn" type="button" class="chip" onclick="window.loadTransactions()" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
-    <div id="loading-text" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
-</div>
+<script>
+    window.currentTxY = {{ t_year }};
+    window.currentTxM = {{ t_month }};
+</script>
 
 <script>
     {
         window.txDataStore = {};
+        window.allTxPagesData = {}; // 페이징 데이터를 관리
 
-        // 요일 변환 함수
-        window.getDowStr = function(dateStr) {
-            const days = ['일','월','화','수','목','금','토'];
-            const d = new Date(dateStr + 'T00:00:00');
-            return `${dateStr} (${days[d.getDay()]})`;
+        window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
+        window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
+
+        // 무한 스와이프를 위한 개별 리스트 HTML 렌더링 (재사용 가능 형태)
+        window.renderTxSlide = function(uid, isMain = false) {
+            return `
+                <div id="tx-container-${uid}"></div>
+                <div id="load-more-${uid}" style="text-align: center; padding: 20px;">
+                    <button type="button" class="chip" onclick="window.loadMoreTxs('${uid}')" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
+                    <div id="loading-text-${uid}" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
+                </div>
+            `;
         };
+
+        // 초기 컨테이너 설정
+        const currUid = `${window.currentTxY}_${window.currentTxM}`;
+        const pDate = window.getPrevMonth(window.currentTxY, window.currentTxM);
+        const nDate = window.getNextMonth(window.currentTxY, window.currentTxM);
+        const prevUid = `${pDate.y}_${pDate.m}`;
+        const nextUid = `${nDate.y}_${nDate.m}`;
+
+        document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(currUid, true);
+        document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(prevUid);
+        document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nextUid);
+
+        // 특정 월의 내역 로딩 함수
+        window.loadMoreTxs = async function(uid, overridePage) {
+            let [y, m] = uid.split('_');
+            if (!window.allTxPagesData[uid]) {
+                window.allTxPagesData[uid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '' };
+            }
+            let s = window.allTxPagesData[uid];
+            if (overridePage) s.page = overridePage;
+
+            if (s.isLoading || !s.hasNext) return;
+            s.isLoading = true;
+            
+            const btn = document.querySelector(`#load-more-${uid} button`);
+            const txt = document.getElementById(`loading-text-${uid}`);
+            if(btn) { btn.innerText = '불러오는 중...'; btn.style.display = 'inline-block'; }
+            if(txt) txt.style.display = 'none';
+
+            try {
+                const res = await fetch(`/api/transactions?year=${y}&month=${m}&page=${s.page}`);
+                const data = await res.json();
+                
+                const container = document.getElementById(`tx-container-${uid}`);
+                if (!container) return; // 돔이 해제되었으면 중단
+                
+                if (s.page === 1) container.innerHTML = '';
+                
+                data.transactions.forEach(tx => {
+                    window.txDataStore[tx.id] = tx;
+                    if (tx.date !== s.lastRenderedDate) {
+                        container.innerHTML += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
+                        s.lastRenderedDate = tx.date;
+                    }
+                    const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
+                    const sign = tx.tx_type === '수입' ? '+' : '-';
+                    const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
+                    const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
+
+                    container.innerHTML += `
+                        <div class="tx-item" style="border-left: 4px solid ${color};">
+                            <div style="flex: 1;">
+                                <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
+                                <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}</div>${memoHtml}
+                            </div>
+                            <div style="text-align: right; margin-left: 12px; min-width: 80px;">
+                                <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
+                                <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                                    <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
+                                    <span style="color: var(--color-line);">|</span>
+                                    <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
+                                </div>
+                            </div>
+                        </div>`;
+                });
+                
+                s.hasNext = data.has_next;
+                s.page++;
+                s.isLoading = false;
+
+                if (s.hasNext) {
+                    if(btn) { btn.innerText = '더보기'; btn.style.display = 'inline-block'; }
+                } else {
+                    if(btn) btn.style.display = 'none';
+                    if (s.page > 2 || data.transactions.length > 0) {
+                        if(txt) txt.style.display = 'block';
+                    } else {
+                        container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--color-muted);">해당 월의 내역이 없습니다.</div>`;
+                    }
+                }
+            } catch(e) { s.isLoading = false; }
+        };
+
+        // 초기 데이터 로딩
+        window.loadMoreTxs(currUid);
+        window.loadMoreTxs(prevUid);
+        window.loadMoreTxs(nextUid);
+
+        // 옵저버(무한 스크롤 다운) 세팅
+        if(window.txObserver) window.txObserver.disconnect();
+        window.txObserver = new IntersectionObserver((entries) => { 
+            entries.forEach(e => {
+                if (e.isIntersecting) {
+                    let uid = e.target.id.replace('load-more-', '');
+                    window.loadMoreTxs(uid);
+                }
+            });
+        }, { rootMargin: '200px' });
+        
+        // 현재 로딩된 옵저버 대상 갱신 헬퍼
+        window.refreshTxObservers = function() {
+            window.txObserver.disconnect();
+            const currUidStr = `${window.currentTxY}_${window.currentTxM}`;
+            const target = document.getElementById(`load-more-${currUidStr}`);
+            if(target) window.txObserver.observe(target);
+        };
+        setTimeout(window.refreshTxObservers, 500);
+
+        // 내역 리스트 무한 스와이프
+        window.shiftTxMonth = async function(dir) {
+            let slider = document.getElementById('tx-slider');
+            slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
+            slider.style.transform = dir === 1 ? `translateX(-66.666%)` : `translateX(0%)`;
+            
+            if (dir === 1) {
+                let n = window.getNextMonth(window.currentTxY, window.currentTxM);
+                window.currentTxY = n.y; window.currentTxM = n.m;
+            } else {
+                let p = window.getPrevMonth(window.currentTxY, window.currentTxM);
+                window.currentTxY = p.y; window.currentTxM = p.m;
+            }
+            
+            document.getElementById('tx-month-header').innerText = `${window.currentTxY}년 ${window.currentTxM}월 내역`;
+            
+            setTimeout(async () => {
+                slider.style.transition = 'none';
+                slider.style.transform = `translateX(-33.333%)`;
+                
+                let cId = `${window.currentTxY}_${window.currentTxM}`;
+                let pDate = window.getPrevMonth(window.currentTxY, window.currentTxM);
+                let nDate = window.getNextMonth(window.currentTxY, window.currentTxM);
+                let pId = `${pDate.y}_${pDate.m}`;
+                let nId = `${nDate.y}_${nDate.m}`;
+
+                document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId);
+                document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
+                document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
+                
+                // 데이터가 이미 렌더링된 캐시가 없으면(스켈레톤) 즉시 첫 페이지 로드
+                window.allTxPagesData[cId] = null; window.loadMoreTxs(cId);
+                if(!window.allTxPagesData[pId]) window.loadMoreTxs(pId);
+                if(!window.allTxPagesData[nId]) window.loadMoreTxs(nId);
+                
+                window.refreshTxObservers();
+                window.history.replaceState(null, '', `/transactions?year=${window.currentTxY}&month=${window.currentTxM}`);
+            }, 300);
+        };
+
+        // 내역 리스트 터치 제스처 연동 (수직 스크롤 간섭 방지 처리)
+        const view = document.getElementById('tx-slider-wrapper');
+        let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
+        
+        view.addEventListener('touchstart', e => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+            isSwiping = true;
+            isScrolling = false;
+            diffX = 0;
+            document.getElementById('tx-slider').style.transition = 'none';
+        }, {passive: true});
+        
+        view.addEventListener('touchmove', e => {
+            if(!isSwiping) return;
+            let currentX = e.touches[0].clientX;
+            let currentY = e.touches[0].clientY;
+            diffX = currentX - startX;
+            let diffY = currentY - startY;
+            
+            // 수직 스크롤 간섭 방지
+            if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
+                isScrolling = true;
+            }
+            if (isScrolling) {
+                isSwiping = false;
+                return;
+            }
+            
+            let cw = view.offsetWidth;
+            let percent = (diffX / cw) * 33.333;
+            document.getElementById('tx-slider').style.transform = `translateX(${-33.333 + percent}%)`;
+        }, {passive: true});
+        
+        view.addEventListener('touchend', e => {
+            if(!isSwiping) return;
+            isSwiping = false;
+            if (diffX < -60) window.shiftTxMonth(1);
+            else if (diffX > 60) window.shiftTxMonth(-1);
+            else {
+                document.getElementById('tx-slider').style.transition = 'transform 0.3s ease';
+                document.getElementById('tx-slider').style.transform = 'translateX(-33.333%)';
+            }
+        });
 
         window.formatNumber = function(input) {
             let val = input.value.replace(/[^0-9]/g, '');
@@ -277,59 +485,7 @@
         window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
         window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
-        let currentPage = 1, hasNext = true, isLoading = false, lastRenderedDate = '';
-        const txContainer = document.getElementById('tx-container');
-        const loadMoreContainer = document.getElementById('load-more-container');
-        const loadMoreBtn = document.getElementById('load-more-btn');
-        const loadingText = document.getElementById('loading-text');
-
-        window.loadTransactions = function() {
-            if (isLoading || !hasNext) return;
-            isLoading = true; loadMoreBtn.innerText = '불러오는 중...'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none';
-
-            fetch(`/api/transactions?page=${currentPage}`)
-                .then(res => res.json())
-                .then(data => {
-                    data.transactions.forEach(tx => {
-                        window.txDataStore[tx.id] = tx;
-                        if (tx.date !== lastRenderedDate) {
-                            // 요일 포맷 적용
-                            txContainer.innerHTML += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
-                            lastRenderedDate = tx.date;
-                        }
-                        const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
-                        const sign = tx.tx_type === '수입' ? '+' : '-';
-                        const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
-                        const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
-
-                        txContainer.innerHTML += `
-                            <div class="tx-item" style="border-left: 4px solid ${color};">
-                                <div style="flex: 1;">
-                                    <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
-                                    <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}</div>${memoHtml}
-                                </div>
-                                <div style="text-align: right; margin-left: 12px; min-width: 80px;">
-                                    <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
-                                    <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-                                        <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
-                                        <span style="color: var(--color-line);">|</span>
-                                        <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
-                                    </div>
-                                </div>
-                            </div>`;
-                    });
-                    
-                    hasNext = data.has_next; currentPage++; isLoading = false;
-                    if (hasNext) { loadMoreBtn.innerText = '더보기'; loadMoreBtn.style.display = 'inline-block'; loadingText.style.display = 'none'; } 
-                    else { loadMoreBtn.style.display = 'none'; if (currentPage > 2 || data.transactions.length > 0) loadingText.style.display = 'block'; }
-                });
-        };
-
-        if(window.txObserver) window.txObserver.disconnect();
-        window.txObserver = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) window.loadTransactions(); }, { rootMargin: '100px' });
-        if(loadMoreContainer) window.txObserver.observe(loadMoreContainer);
-
-        // 내역 등록 (AJAX)
+        // 새 내역 등록 폼 (AJAX 처리)
         document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target); fd.append('ajax', '1');
@@ -343,12 +499,14 @@
                     
                     const t = document.getElementById('toast-popup'); t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
                     
-                    txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+                    let currUid = `${window.currentTxY}_${window.currentTxM}`;
+                    window.allTxPagesData[currUid] = null;
+                    window.loadMoreTxs(currUid);
                 }
             } catch(e) { alert('오류가 발생했습니다.'); }
         });
 
-        // 수정/삭제 바텀시트 제어
+        // 수정 바텀시트 제어
         window.setEditTxType = function(type) {
             document.getElementById('edit_tx_type').value = type;
             if (type === '지출') { document.getElementById('edit-btn-expense').classList.add('active'); document.getElementById('edit-btn-income').classList.remove('active'); } 
@@ -362,11 +520,10 @@
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
             document.getElementById('edit_transactor').value = tx.transactor;
             document.getElementById('edit_title_input').value = tx.title;
-            // 미분류 매핑을 위해 안전하게 fallback
             document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
             document.getElementById('edit_date_input').value = tx.date;
             document.getElementById('edit_time_input').value = tx.time;
-            document.getElementById('time_picker_input_edit').value = tx.time; // 다이얼로그 연동용
+            document.getElementById('time_picker_input_edit').value = tx.time;
             document.getElementById('edit_memo_input').value = tx.memo || "";
             document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
             
@@ -379,6 +536,7 @@
             document.getElementById('edit-bottom-sheet').classList.remove('active');
         };
 
+        // 내역 수정 제출 (AJAX 처리)
         document.getElementById('tx-edit-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target); fd.append('ajax', '1');
@@ -386,16 +544,22 @@
             if(res.ok) {
                 window.closeEditSheet();
                 const t = document.getElementById('toast-popup'); t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
-                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+                
+                let currUid = `${window.currentTxY}_${window.currentTxM}`;
+                window.allTxPagesData[currUid] = null;
+                window.loadMoreTxs(currUid);
             }
         });
 
+        // AJAX 내역 삭제
         window.deleteTx = async function(id) {
             if(!confirm('정말 삭제하시겠습니까?')) return;
             let fd = new FormData(); fd.append('ajax', '1');
             let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
             if(res.ok) {
-                txContainer.innerHTML = ''; currentPage = 1; hasNext = true; lastRenderedDate = ''; window.loadTransactions();
+                let currUid = `${window.currentTxY}_${window.currentTxM}`;
+                window.allTxPagesData[currUid] = null;
+                window.loadMoreTxs(currUid);
             }
         };
     }

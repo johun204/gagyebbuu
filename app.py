@@ -221,7 +221,6 @@ def leave_ledger():
         
     return redirect(url_for('onboarding'))
 
-# --- 홈 데이터 구성 헬퍼 함수 ---
 def build_home_data(user_id, y, m):
     user = User.query.get(user_id)
     ledger = Ledger.query.get(user.ledger_id)
@@ -409,7 +408,14 @@ def api_transactions():
     user = User.query.get(session['user_id'])
     page = int(request.args.get('page', 1))
     per_page = 10
-    t_year, t_month, _, _, _, _ = get_target_date()
+    
+    # URL 파라미터가 명시되어있으면 세션보다 우선 적용 (내역 탭 무한 스와이프 용)
+    y = request.args.get('year')
+    m = request.args.get('month')
+    if y and m:
+        t_year, t_month = int(y), int(m)
+    else:
+        t_year, t_month, _, _, _, _ = get_target_date()
     
     query = Transaction.query.filter_by(ledger_id=user.ledger_id)
     all_tx = query.order_by(Transaction.datetime_val.desc()).all()
