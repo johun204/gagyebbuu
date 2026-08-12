@@ -9,7 +9,6 @@ from models import db, User, Ledger, Category, Transaction, Notification
 app = Flask(__name__)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
-# 세션 유지 기간을 365일로 설정
 app.permanent_session_lifetime = timedelta(days=365)
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
@@ -111,7 +110,6 @@ def kakao_callback():
         db.session.add(user)
         db.session.commit()
         
-    # 로그인 성공 시 세션을 영구적으로 설정하여 브라우저 종료 시에도 유지
     session.permanent = True
     session['user_id'] = user.id
     
@@ -241,9 +239,17 @@ def home():
 
     budget_status = []
     for c in categories:
-        if c.budget > 0 and c.name != '미분류':
+        if c.name != '미분류':
             spent = cat_expense_total.get(c.name, 0)
-            budget_status.append({'name': c.name, 'budget': c.budget, 'spent': spent})
+            # 예산이 0이더라도 사용액(지출)이 있으면 목록에 포함
+            if c.budget > 0 or spent > 0:
+                display_budget = c.budget if c.budget > 0 else spent
+                budget_status.append({
+                    'name': c.name, 
+                    'budget': c.budget, 
+                    'display_budget': display_budget, 
+                    'spent': spent
+                })
             
     return render_template('home.html', ledger=ledger, 
                            monthly_income=monthly_income, monthly_expense=monthly_expense,
