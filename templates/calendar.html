@@ -1,20 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    /* 입력 필드 오버플로우 방지 */
     input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
     .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
 
-    /* 미디어 쿼리: 반응형 금액 표시 처리 */
     @media (max-width: 480px) { .amt-full { display: none !important; } .amt-short { display: inline !important; } }
     @media (min-width: 481px) { .amt-full { display: inline !important; } .amt-short { display: none !important; } }
 
-    /* 무한 스와이프용 슬라이드 뷰 구조 */
     #calendar-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
     #calendar-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
     .calendar-slide { width: 33.333%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
 
-    /* 플로팅 액션 버튼(FAB) & 바텀시트 */
     .fab { position: fixed; bottom: 84px; right: 20px; width: 56px; height: 56px; border-radius: 28px; background: var(--color-action); color: #fff; font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(6, 169, 108, 0.4); z-index: 999; cursor: pointer; border: none; text-decoration: none; }
     #bottom-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #bottom-sheet-overlay.active { opacity: 1; pointer-events: auto; }
@@ -31,17 +27,14 @@
     dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
 </style>
 
-<!-- 전역 미분류 카테고리 세팅 -->
 {% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
 
-<!-- 상단 월 선택기 -->
 <div class="month-selector">
     <a href="javascript:void(0)" onclick="window.shiftMonth(-1)" class="no-spa">◀</a> 
     <h3 id="cal-month-header">{{ t_year }}년 {{ t_month }}월</h3>
     <a href="javascript:void(0)" onclick="window.shiftMonth(1)" class="no-spa">▶</a>
 </div>
 
-<!-- 캘린더 달력 무한 스와이프 영역 -->
 <div id="calendar-slider-wrapper">
     <div id="calendar-slider">
         <div id="slide-prev" class="calendar-slide"></div>
@@ -50,19 +43,16 @@
     </div>
 </div>
 
-<!-- 선택한 일자의 하단 내역 리스트 -->
 <div class="card" style="padding: 16px; margin-top: 16px; margin-bottom: 24px;">
+    <!-- 날짜만 표출되도록 소제목 간소화 -->
     <h3 id="daily-list-title" style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--color-foreground);"></h3>
     <div id="daily-tx-list"></div>
 </div>
 
-<!-- 토스트 팝업 -->
 <div id="toast-popup">내역이 처리되었습니다.</div>
 
-<!-- 하단 플로팅 추가 버튼 -->
 <button class="fab no-spa" onclick="window.openAddSheet()">+</button>
 
-<!-- 통합 추가/수정 바텀시트 -->
 <div id="bottom-sheet-overlay" onclick="window.closeBottomSheet()"></div>
 <div id="bottom-sheet">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -100,18 +90,14 @@
                     {% endfor %}
                 </select>
             </div>
-        </div>
-        
-        <div class="flex-row">
-            <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <input type="date" name="date" id="cal_date_input" class="input-field" required style="flex: 1;">
-                <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
-                <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
+            <div class="input-wrapper" style="flex: 0 0 140px;">
+                <input type="date" name="date" id="cal_date_input" class="input-field" required>
             </div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
             <div class="input-wrapper"><input type="text" id="cal_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택)"></div>
+            <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
         </div>
 
         <div class="flex-row" style="margin-bottom: 16px;">
@@ -124,7 +110,6 @@
     </form>
 </div>
 
-<!-- 캘린더 시간 설정 다이얼로그 -->
 <dialog id="cal-time-dialog">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -136,7 +121,6 @@
     <button type="button" class="btn-action" style="width:100%;" onclick="window.setCalTime()">확인</button>
 </dialog>
 
-<!-- 파이썬 템플릿 변수를 JS 글로벌로 넘김 -->
 <script>
     window.initialData = {{ initial_data | tojson | safe }};
     window.currentY = {{ t_year }};
@@ -149,14 +133,12 @@
         window.allMonthsData = {};
         window.txDataStore = {}; 
         
-        // 날짜+요일 표시 포맷터
         window.getDowStr = function(dateStr) {
             const days = ['일','월','화','수','목','금','토'];
             const d = new Date(dateStr + 'T00:00:00');
             return `${dateStr} (${days[d.getDay()]})`;
         };
 
-        // n만 원 포맷팅 (반응형 10만원 미만 소숫점 1자리 절사)
         window.formatShortMoney = function(amt) {
             if (!amt) return '';
             if (amt < 100000) {
@@ -179,7 +161,6 @@
             return data;
         };
 
-        // 1개 월치 달력 Grid HTML 렌더링 함수
         window.renderCalendarGrid = function(data) {
             let html = `
             <div class="card" style="padding: 16px; margin-bottom: 0;">
@@ -212,7 +193,6 @@
                         
                         let isSelected = (dateStr === window.selectedDate) ? 'background-color: rgba(6, 169, 108, 0.1); border-radius: 8px;' : '';
 
-                        // 데이터 스토리지 업데이트
                         if(data.tx_by_date[dateStr]) {
                             data.tx_by_date[dateStr].forEach(tx => window.txDataStore[tx.id] = tx);
                         }
@@ -234,14 +214,14 @@
             return html;
         };
 
-        // 선택한 날짜 렌더링 (하단 리스트 갱신)
         window.selectDate = function(dateStr) {
             window.selectedDate = dateStr;
             document.querySelectorAll('.cal-cell').forEach(el => el.style.backgroundColor = '');
             let cell = document.getElementById('cal-cell-' + dateStr);
             if(cell) cell.style.backgroundColor = 'rgba(6, 169, 108, 0.1)';
             
-            document.getElementById('daily-list-title').innerText = `${window.getDowStr(dateStr)} 상세 내역`;
+            // 요구사항 반영: "날짜"만 간결하게 표시
+            document.getElementById('daily-list-title').innerText = window.getDowStr(dateStr);
             
             let data = window.allMonthsData[`${window.currentY}-${window.currentM}`];
             if(!data) return;
@@ -276,7 +256,6 @@
             document.getElementById('daily-tx-list').innerHTML = html;
         };
 
-        // 초기 구동 세팅
         window.allMonthsData[`${window.currentY}-${window.currentM}`] = window.initialData;
         document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(window.initialData);
         
@@ -291,7 +270,6 @@
         window.fetchMonthData(p.y, p.m).then(d => document.getElementById('slide-prev').innerHTML = window.renderCalendarGrid(d));
         window.fetchMonthData(n.y, n.m).then(d => document.getElementById('slide-next').innerHTML = window.renderCalendarGrid(d));
 
-        // 무한 스와이프 제어 함수
         window.shiftMonth = async function(dir) {
             let slider = document.getElementById('calendar-slider');
             slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
@@ -330,7 +308,6 @@
             }, 300);
         };
 
-        // 터치 제스처 연동
         const view = document.getElementById('calendar-slider-wrapper');
         let startX = 0, diffX = 0, isSwiping = false;
         
@@ -359,7 +336,6 @@
             }
         });
 
-        // 숫자 포맷터 및 바텀시트 동작 제어
         window.formatNumber = function(input) {
             let val = input.value.replace(/[^0-9]/g, '');
             if(val === '') input.value = '';
@@ -390,7 +366,7 @@
             document.getElementById('cal_amount_input').value = '';
             document.getElementById('cal_title_input').value = '';
             document.getElementById('cal_memo_input').value = '';
-            document.getElementById('cal_date_input').value = window.selectedDate; // 선택한 날짜 자동 채움
+            document.getElementById('cal_date_input').value = window.selectedDate;
             document.getElementById('cal_exclude_analysis').checked = false;
             
             document.getElementById('bottom-sheet-overlay').classList.add('active');
@@ -406,8 +382,6 @@
             document.getElementById('cal_amount_input').value = tx.amount.toLocaleString();
             document.getElementById('cal_transactor_select').value = tx.transactor;
             document.getElementById('cal_title_input').value = tx.title;
-            
-            // 미분류 매핑을 위해 안전하게 fallback
             document.getElementById('cal_category_select').value = tx.category_id || document.querySelector('#cal_category_select option').value;
             document.getElementById('cal_date_input').value = tx.date;
             document.getElementById('cal_time_input').value = tx.time;
@@ -424,7 +398,6 @@
             document.getElementById('bottom-sheet').classList.remove('active');
         };
 
-        // AJAX 폼 제출 처리
         document.getElementById('cal-tx-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const fd = new FormData(e.target); fd.append('ajax', '1');
@@ -436,16 +409,14 @@
                     t.innerText = "처리 완료되었습니다."; t.classList.add('show'); 
                     setTimeout(() => t.classList.remove('show'), 3000);
                     
-                    // 캐시 날리고 현행 월 재조회
                     window.allMonthsData = {};
                     let data = await window.fetchMonthData(window.currentY, window.currentM);
                     document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                    window.selectDate(window.selectedDate); // 갱신된 데이터를 토대로 다시 하단 리스트만 재렌더링
+                    window.selectDate(window.selectedDate);
                 }
             } catch(e) { alert('오류가 발생했습니다.'); }
         });
 
-        // AJAX 내역 삭제
         window.deleteTx = async function(id) {
             if(!confirm('정말 삭제하시겠습니까?')) return;
             let fd = new FormData(); fd.append('ajax', '1');

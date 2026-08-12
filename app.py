@@ -34,13 +34,18 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
+# PWA Service Worker 서빙 라우트 추가 (최상위 스코프를 위함)
+@app.route('/sw.js')
+def serve_sw():
+    return app.send_static_file('sw.js')
+
 @app.before_request
 def require_login():
     if 'user_id' in session:
         session.permanent = True
         session.modified = True
 
-    if request.endpoint not in ['login', 'kakao_callback', 'static', 'invite']:
+    if request.endpoint not in ['login', 'kakao_callback', 'static', 'invite', 'serve_sw']:
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = User.query.get(session['user_id'])
@@ -624,7 +629,7 @@ def search():
     keyword = request.args.get('keyword')
     min_amount = request.args.get('min_amount')
     max_amount = request.args.get('max_amount')
-    tx_type = request.args.get('tx_type') # 신규 검색 조건 (수입/지출)
+    tx_type = request.args.get('tx_type')
     
     query = Transaction.query.filter_by(ledger_id=ledger.id)
     

@@ -14,7 +14,6 @@
     <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
     <form action="/search" method="GET">
         
-        <!-- 검색 수입 지출 타입 탭 추가 -->
         <div style="display: flex; gap: 8px; margin-bottom: 16px;">
             <button type="button" id="search-btn-all" class="btn-tab {% if request.args.get('tx_type') not in ['수입', '지출'] %}active{% endif %}" onclick="window.setSearchTxType('')">전체</button>
             <button type="button" id="search-btn-expense" class="btn-tab {% if request.args.get('tx_type') == '지출' %}active{% endif %}" onclick="window.setSearchTxType('지출')">지출</button>
@@ -84,7 +83,6 @@
 
 <script>
     {
-        // 탭 버튼 클릭 상태 제어
         window.setSearchTxType = function(type) {
             document.getElementById('search_tx_type').value = type;
             document.querySelectorAll('#search-btn-all, #search-btn-expense, #search-btn-income').forEach(b => b.classList.remove('active'));
