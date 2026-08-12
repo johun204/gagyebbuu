@@ -1,4 +1,11 @@
 import os
+import time
+
+# Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
+os.environ['TZ'] = 'Asia/Seoul'
+if hasattr(time, 'tzset'):
+    time.tzset()
+
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 from datetime import datetime, timedelta
 import csv
@@ -241,7 +248,6 @@ def home():
     for c in categories:
         if c.name != '미분류':
             spent = cat_expense_total.get(c.name, 0)
-            # 예산이 0이더라도 사용액(지출)이 있으면 목록에 포함
             if c.budget > 0 or spent > 0:
                 display_budget = c.budget if c.budget > 0 else spent
                 budget_status.append({
