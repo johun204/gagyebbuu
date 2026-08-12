@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
+    /* 입력 필드 오버플로우 방지 (iPhone 등 작은 화면 대응) */
+    input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
+    .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
+
     .date-divider { font-size: 14px; font-weight: 700; color: var(--color-secondary); margin: 24px 0 8px 0; border-bottom: 2px solid var(--color-line); padding-bottom: 4px; }
     .tx-item { padding: 16px; margin-bottom: 8px; background: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); display: flex; justify-content: space-between; align-items: flex-start; }
     .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
@@ -12,14 +16,15 @@
     #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     #toast-popup.show { opacity: 1; }
 
-    /* 수정 팝업 바텀시트 CSS */
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
     #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     #edit-bottom-sheet.active { transform: translateY(0); }
 </style>
 
-<!-- 토스트 팝업 -->
+<!-- 전역 미분류 카테고리 세팅 (수정/등록 폼 매핑용) -->
+{% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
+
 <div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
 
 <div class="month-selector">
@@ -46,7 +51,7 @@
         </div>
         
         <div class="flex-row">
-            <div class="input-wrapper" style="flex: 0 0 120px;">
+            <div class="input-wrapper" style="flex: 0 0 100px;">
                 <select name="transactor" required class="input-field">
                     {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
                     <option value="함께">함께</option>
@@ -58,12 +63,12 @@
         <div class="flex-row">
             <div class="input-wrapper" style="display: flex; gap: 8px;">
                 <select name="category_id" id="category_select" class="input-field" style="flex: 1;">
-                    <option value="">미분류</option>
+                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
                     {% for cat in categories if cat.name != '미분류' %}
                         <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
-                <button type="button" class="chip" onclick="window.openCatModal()">분류 편집</button>
+                <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
         </div>
         
@@ -71,7 +76,7 @@
             <div class="input-wrapper" style="display: flex; gap: 8px;">
                 <input type="date" name="date" class="input-field" value="{{ now.strftime('%Y-%m-%d') }}" required style="flex: 1;">
                 <input type="hidden" name="time" id="tx_time" value="{{ now.strftime('%H:%M') }}">
-                <button type="button" class="chip" onclick="document.getElementById('time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px;">🕒</button>
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
             </div>
         </div>
         
@@ -121,20 +126,24 @@
         <div class="flex-row">
             <div class="input-wrapper">
                 <select name="category_id" id="edit_category_select" class="input-field">
-                    <option value="">미분류</option>
+                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
                     {% for cat in categories if cat.name != '미분류' %}
                         <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="input-wrapper" style="flex: 0 0 140px;">
-                <input type="date" name="date" id="edit_date_input" class="input-field" required>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" id="edit_date_input" class="input-field" required style="flex: 1;">
+                <input type="hidden" name="time" id="edit_time_input">
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" id="time-display-btn-edit" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
             </div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
             <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field"></div>
-            <input type="hidden" name="time" id="edit_time_input">
         </div>
         
         <div class="flex-row" style="margin-bottom: 16px;">
@@ -147,6 +156,7 @@
     </form>
 </div>
 
+<!-- 시간 설정 다이얼로그 (등록용) -->
 <dialog id="time-dialog">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -156,6 +166,18 @@
         <div class="input-wrapper"><input type="time" id="time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
     </div>
     <button type="button" class="btn-action" style="width:100%;" onclick="window.setTime()">확인</button>
+</dialog>
+
+<!-- 시간 설정 다이얼로그 (수정용) -->
+<dialog id="time-dialog-edit">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">시간 변경</h3>
+        <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="time" id="time_picker_input_edit" class="input-field"></div>
+    </div>
+    <button type="button" class="btn-action" style="width:100%;" onclick="window.setTimeEdit()">확인</button>
 </dialog>
 
 <dialog id="cat-dialog">
@@ -178,8 +200,14 @@
 
 <script>
     {
-        // 전역 데이터 저장소
         window.txDataStore = {};
+
+        // 요일 변환 함수
+        window.getDowStr = function(dateStr) {
+            const days = ['일','월','화','수','목','금','토'];
+            const d = new Date(dateStr + 'T00:00:00');
+            return `${dateStr} (${days[d.getDay()]})`;
+        };
 
         window.formatNumber = function(input) {
             let val = input.value.replace(/[^0-9]/g, '');
@@ -204,13 +232,19 @@
             document.getElementById('tx_time').value = document.getElementById('time_picker_input').value;
             document.getElementById('time-dialog').close();
         };
+        
+        window.setTimeEdit = function() {
+            document.getElementById('edit_time_input').value = document.getElementById('time_picker_input_edit').value;
+            document.getElementById('time-dialog-edit').close();
+        };
 
-        // 카테고리 모달 로직
         window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
         window.loadCategories = async function() {
             const res = await fetch('/api/categories');
             const cats = await res.json();
             const editableCats = cats.filter(c => c.name !== '미분류');
+            const uncat = cats.find(c => c.name === '미분류');
+            
             const list = document.getElementById('cat-list');
             list.innerHTML = editableCats.map(c => `
                 <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-line); align-items: center;">
@@ -233,7 +267,7 @@
             const val = select.value;
             const eval = editSelect ? editSelect.value : '';
             
-            let selectHtml = `<option value="${cats.find(c=>c.name==='미분류')?cats.find(c=>c.name==='미분류').id:''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
             select.innerHTML = selectHtml; select.value = val;
             if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = eval; }
         };
@@ -243,7 +277,6 @@
         window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
         window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
-        // AJAX 리스트 스크롤 로딩
         let currentPage = 1, hasNext = true, isLoading = false, lastRenderedDate = '';
         const txContainer = document.getElementById('tx-container');
         const loadMoreContainer = document.getElementById('load-more-container');
@@ -260,7 +293,8 @@
                     data.transactions.forEach(tx => {
                         window.txDataStore[tx.id] = tx;
                         if (tx.date !== lastRenderedDate) {
-                            txContainer.innerHTML += `<div class="date-divider">${tx.date}</div>`;
+                            // 요일 포맷 적용
+                            txContainer.innerHTML += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
                             lastRenderedDate = tx.date;
                         }
                         const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
@@ -328,9 +362,11 @@
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
             document.getElementById('edit_transactor').value = tx.transactor;
             document.getElementById('edit_title_input').value = tx.title;
-            document.getElementById('edit_category_select').value = tx.category_id || "";
+            // 미분류 매핑을 위해 안전하게 fallback
+            document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
             document.getElementById('edit_date_input').value = tx.date;
             document.getElementById('edit_time_input').value = tx.time;
+            document.getElementById('time_picker_input_edit').value = tx.time; // 다이얼로그 연동용
             document.getElementById('edit_memo_input').value = tx.memo || "";
             document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
             

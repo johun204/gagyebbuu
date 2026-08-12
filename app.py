@@ -16,7 +16,10 @@ from models import db, User, Ledger, Category, Transaction, Notification
 app = Flask(__name__)
 
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
-app.permanent_session_lifetime = timedelta(days=365)
+
+# 세션 영구 유지 및 매 요청 시 갱신 설정 (로그인 풀림 방지)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
+app.config['SESSION_REFRESH_EACH_REQUEST'] = True
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
 if db_url.startswith("postgres://"):
@@ -33,6 +36,11 @@ KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
 @app.before_request
 def require_login():
+    # 매 요청마다 세션을 수정 상태로 만들어 쿠키 만료일을 365일 뒤로 계속 연장
+    if 'user_id' in session:
+        session.permanent = True
+        session.modified = True
+
     if request.endpoint not in ['login', 'kakao_callback', 'static', 'invite']:
         if 'user_id' not in session:
             return redirect(url_for('login'))
@@ -323,7 +331,6 @@ def calendar():
                            initial_data=initial_data,
                            t_year=t_year, t_month=t_month, p_y=p_y, p_m=p_m, n_y=n_y, n_m=n_m, current_tab='calendar')
 
-# 비동기 달력 슬라이드 통신을 위한 API
 @app.route('/api/calendar_data')
 def api_calendar_data():
     user = User.query.get(session['user_id'])
@@ -584,7 +591,6 @@ def edit_transaction(tx_id):
         tx.datetime_val = datetime.strptime(f"{request.form.get('date')} {request.form.get('time')}", "%Y-%m-%d %H:%M")
         db.session.commit()
         
-        # AJAX 로 수정 요청이 들어온 경우 처리
         if request.form.get('ajax') == '1':
             return jsonify({'success': True})
             

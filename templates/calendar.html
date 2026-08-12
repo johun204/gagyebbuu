@@ -1,15 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
+    /* 입력 필드 오버플로우 방지 */
+    input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
+    .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
+
     /* 미디어 쿼리: 반응형 금액 표시 처리 */
-    @media (max-width: 480px) {
-        .amt-full { display: none !important; }
-        .amt-short { display: inline !important; }
-    }
-    @media (min-width: 481px) {
-        .amt-full { display: inline !important; }
-        .amt-short { display: none !important; }
-    }
+    @media (max-width: 480px) { .amt-full { display: none !important; } .amt-short { display: inline !important; } }
+    @media (min-width: 481px) { .amt-full { display: inline !important; } .amt-short { display: none !important; } }
 
     /* 무한 스와이프용 슬라이드 뷰 구조 */
     #calendar-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
@@ -28,7 +26,13 @@
 
     #toast-popup { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     #toast-popup.show { opacity: 1; }
+    
+    dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+    dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
 </style>
+
+<!-- 전역 미분류 카테고리 세팅 -->
+{% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
 
 <!-- 상단 월 선택기 -->
 <div class="month-selector">
@@ -90,20 +94,24 @@
         <div class="flex-row">
             <div class="input-wrapper">
                 <select name="category_id" id="cal_category_select" class="input-field">
-                    <option value="">미분류</option>
+                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
                     {% for cat in categories if cat.name != '미분류' %}
                         <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="input-wrapper" style="flex: 0 0 140px;">
-                <input type="date" name="date" id="cal_date_input" class="input-field" required>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" id="cal_date_input" class="input-field" required style="flex: 1;">
+                <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
+                <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
             </div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
             <div class="input-wrapper"><input type="text" id="cal_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택)"></div>
-            <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
         </div>
 
         <div class="flex-row" style="margin-bottom: 16px;">
@@ -116,6 +124,18 @@
     </form>
 </div>
 
+<!-- 캘린더 시간 설정 다이얼로그 -->
+<dialog id="cal-time-dialog">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
+        <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="time" id="cal_time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
+    </div>
+    <button type="button" class="btn-action" style="width:100%;" onclick="window.setCalTime()">확인</button>
+</dialog>
+
 <!-- 파이썬 템플릿 변수를 JS 글로벌로 넘김 -->
 <script>
     window.initialData = {{ initial_data | tojson | safe }};
@@ -127,7 +147,14 @@
 <script>
     {
         window.allMonthsData = {};
-        window.txDataStore = {}; // 상세 수정용 글로벌 메모리
+        window.txDataStore = {}; 
+        
+        // 날짜+요일 표시 포맷터
+        window.getDowStr = function(dateStr) {
+            const days = ['일','월','화','수','목','금','토'];
+            const d = new Date(dateStr + 'T00:00:00');
+            return `${dateStr} (${days[d.getDay()]})`;
+        };
 
         // n만 원 포맷팅 (반응형 10만원 미만 소숫점 1자리 절사)
         window.formatShortMoney = function(amt) {
@@ -178,7 +205,6 @@
                         
                         let numStyle = isToday ? `background: var(--color-action); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto;` : `color: ${dayColor};`;
                         
-                        // 반응형 태그 추가 삽입
                         let incFull = totals.income > 0 ? '+' + totals.income.toLocaleString() : '';
                         let incShort = totals.income > 0 ? '+' + window.formatShortMoney(totals.income) : '';
                         let expFull = totals.expense > 0 ? '-' + totals.expense.toLocaleString() : '';
@@ -208,14 +234,14 @@
             return html;
         };
 
-        // 선택한 날짜 렌더링
+        // 선택한 날짜 렌더링 (하단 리스트 갱신)
         window.selectDate = function(dateStr) {
             window.selectedDate = dateStr;
             document.querySelectorAll('.cal-cell').forEach(el => el.style.backgroundColor = '');
             let cell = document.getElementById('cal-cell-' + dateStr);
             if(cell) cell.style.backgroundColor = 'rgba(6, 169, 108, 0.1)';
             
-            document.getElementById('daily-list-title').innerText = `${dateStr} 상세 내역`;
+            document.getElementById('daily-list-title').innerText = `${window.getDowStr(dateStr)} 상세 내역`;
             
             let data = window.allMonthsData[`${window.currentY}-${window.currentM}`];
             if(!data) return;
@@ -250,7 +276,7 @@
             document.getElementById('daily-tx-list').innerHTML = html;
         };
 
-        // 초기 구동
+        // 초기 구동 세팅
         window.allMonthsData[`${window.currentY}-${window.currentM}`] = window.initialData;
         document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(window.initialData);
         
@@ -339,6 +365,11 @@
             if(val === '') input.value = '';
             else input.value = parseInt(val, 10).toLocaleString();
         };
+        
+        window.setCalTime = function() {
+            document.getElementById('cal_time_input').value = document.getElementById('cal_time_picker_input').value;
+            document.getElementById('cal-time-dialog').close();
+        };
 
         window.setCalTxType = function(type) {
             document.getElementById('cal_tx_type').value = type;
@@ -359,7 +390,7 @@
             document.getElementById('cal_amount_input').value = '';
             document.getElementById('cal_title_input').value = '';
             document.getElementById('cal_memo_input').value = '';
-            document.getElementById('cal_date_input').value = window.selectedDate; // 선택한 날짜 고정
+            document.getElementById('cal_date_input').value = window.selectedDate; // 선택한 날짜 자동 채움
             document.getElementById('cal_exclude_analysis').checked = false;
             
             document.getElementById('bottom-sheet-overlay').classList.add('active');
@@ -375,9 +406,12 @@
             document.getElementById('cal_amount_input').value = tx.amount.toLocaleString();
             document.getElementById('cal_transactor_select').value = tx.transactor;
             document.getElementById('cal_title_input').value = tx.title;
-            document.getElementById('cal_category_select').value = tx.category_id || "";
+            
+            // 미분류 매핑을 위해 안전하게 fallback
+            document.getElementById('cal_category_select').value = tx.category_id || document.querySelector('#cal_category_select option').value;
             document.getElementById('cal_date_input').value = tx.date;
             document.getElementById('cal_time_input').value = tx.time;
+            document.getElementById('cal_time_picker_input').value = tx.time;
             document.getElementById('cal_memo_input').value = tx.memo || "";
             document.getElementById('cal_exclude_analysis').checked = tx.exclude_analysis;
             
