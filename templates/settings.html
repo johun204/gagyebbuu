@@ -38,28 +38,29 @@
 </div>
 
 <div class="card">
-    {% if ledger.users|length >= 2 %}
-    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="document.getElementById('invite-content').style.display = document.getElementById('invite-content').style.display === 'none' ? 'block' : 'none'; document.getElementById('invite-arrow').innerText = document.getElementById('invite-content').style.display === 'none' ? '▼' : '▲';">
-        <h3 style="font-size: 16px; font-weight: 700; margin: 0;">가계부 초대 <span class="chip" style="font-size: 10px; padding: 2px 6px; background: rgba(6, 169, 108, 0.15); color: var(--color-action); margin-left: 4px;">완료</span></h3>
-        <span id="invite-arrow" style="font-size: 12px; color: var(--color-muted);">▼</span>
+    <!-- 가계부 초대 섹션 (그리드 슬라이딩 구조 도입) -->
+    {% set is_invite_open = ledger.users|length < 2 %}
+    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="window.toggleSlide('invite-wrapper', 'invite-arrow')">
+        <h3 style="font-size: 16px; font-weight: 700; margin: 0;">가계부 초대 {% if not is_invite_open %}<span class="chip" style="font-size: 10px; padding: 2px 6px; background: rgba(6, 169, 108, 0.15); color: var(--color-action); margin-left: 4px;">완료</span>{% endif %}</h3>
+        <span id="invite-arrow" class="arrow-icon {% if is_invite_open %}open{% endif %}" style="font-size: 12px; color: var(--color-muted);">▼</span>
     </div>
-    <div id="invite-content" style="display: none; margin-top: 16px; border-top: 1px solid var(--color-line); padding-top: 16px;">
-    {% else %}
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 초대</h3>
-    <div id="invite-content">
-    {% endif %}
-        <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 12px;">가족이나 연인을 초대해 함께 가계부를 관리하세요.</p>
-        
-        <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 링크</label>
-        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; margin-top: 4px;">
-            <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-            <button type="button" class="btn-action" onclick="window.copyLink()" style="padding: 0 16px; height: 48px;">복사</button>
-        </div>
+    <div id="invite-wrapper" class="slide-wrapper {% if is_invite_open %}open{% endif %}">
+        <div class="slide-inner">
+            <div style="border-top: 1px solid var(--color-line); padding-top: 16px;">
+                <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 12px;">가족이나 연인을 초대해 함께 가계부를 관리하세요.</p>
+                
+                <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 링크</label>
+                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; margin-top: 4px;">
+                    <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
+                    <button type="button" class="btn-action" onclick="window.copyLink()" style="padding: 0 16px; height: 48px;">복사</button>
+                </div>
 
-        <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 코드 (직접 입력용)</label>
-        <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
-            <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-            <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
+                <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 코드 (직접 입력용)</label>
+                <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
+                    <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
+                    <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -85,27 +86,30 @@
 </div>
 
 <div class="card">
-    <!-- 데이터 관리 그룹 접기 토글 구현 -->
-    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="document.getElementById('data-manage-content').style.display = document.getElementById('data-manage-content').style.display === 'none' ? 'block' : 'none'; document.getElementById('data-manage-arrow').innerText = document.getElementById('data-manage-content').style.display === 'none' ? '▼' : '▲';">
+    <!-- 데이터 관리 그룹 슬라이딩 토글화 -->
+    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="window.toggleSlide('data-manage-wrapper', 'data-manage-arrow')">
         <h3 style="font-size: 16px; font-weight: 700; margin: 0;">데이터 관리</h3>
-        <span id="data-manage-arrow" style="font-size: 12px; color: var(--color-muted);">▼</span>
+        <span id="data-manage-arrow" class="arrow-icon" style="font-size: 12px; color: var(--color-muted);">▼</span>
     </div>
     
-    <div id="data-manage-content" style="display: none; margin-top: 16px; border-top: 1px solid var(--color-line); padding-top: 16px;">
-        <a href="/csv_manage" class="btn-action" style="width: 100%; text-align: center; text-decoration: none; margin-bottom: 24px;">CSV 내보내기 / 불러오기</a>
-        
-        <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #fe493d;">가계부 나가기</h3>
-        <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">
-            혼자 사용 중인 가계부를 나가면 모든 데이터가 즉시 삭제됩니다. 필요한 경우 먼저 CSV로 데이터를 백업해 주세요.<br>
-            (2명이 함께 사용 중인 경우 남은 사용자는 계속 이용할 수 있습니다.)
-        </p>
-        <form action="/leave_ledger" method="POST" onsubmit="return window.confirmLeave({{ ledger.users|length }})">
-            <button type="submit" class="btn-action" style="width: 100%; background-color: #fe493d;">가계부 나가기</button>
-        </form>
+    <div id="data-manage-wrapper" class="slide-wrapper">
+        <div class="slide-inner">
+            <div style="border-top: 1px solid var(--color-line); padding-top: 16px;">
+                <a href="/csv_manage" class="btn-action" style="width: 100%; text-align: center; text-decoration: none; margin-bottom: 24px;">CSV 내보내기 / 불러오기</a>
+                
+                <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #fe493d;">가계부 나가기</h3>
+                <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">
+                    혼자 사용 중인 가계부를 나가면 모든 데이터가 즉시 삭제됩니다. 필요한 경우 먼저 CSV로 데이터를 백업해 주세요.<br>
+                    (2명이 함께 사용 중인 경우 남은 사용자는 계속 이용할 수 있습니다.)
+                </p>
+                <form action="/leave_ledger" method="POST" onsubmit="return window.confirmLeave({{ ledger.users|length }})">
+                    <button type="submit" class="btn-action" style="width: 100%; background-color: #fe493d;">가계부 나가기</button>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 
-<!-- 로그아웃 버튼을 데이터 관리 카드 밖으로 이동하여 최하단 배치 -->
 <div style="margin-top: 24px; margin-bottom: 24px;">
     <a href="/logout" class="chip no-spa" style="color: var(--color-secondary); background: var(--color-line); text-decoration: none; display: block; text-align: center; padding: 14px; font-size: 14px; font-weight: 700; border-radius: var(--radius-action);" onclick="if(!confirm('로그아웃 하시겠습니까?')) { event.preventDefault(); return false; }">로그아웃</a>
 </div>

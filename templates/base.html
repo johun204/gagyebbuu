@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>가계쀼 - 공유 가계부</title>
     
-    <!-- 링크 공유 시 표시되는 Open Graph 미리보기 메타 태그 -->
     <meta property="og:title" content="가계쀼 - 공유 가계부">
     <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
     <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
@@ -60,6 +59,21 @@
         dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
         dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
         dialog input[type="time"], dialog input[type="date"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+
+        /* 스켈레톤 로딩 UI CSS */
+        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-card { background: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
+        .skeleton-text.short { width: 50%; }
+        .skeleton-circle { width: 40px; height: 40px; border-radius: 50%; }
+
+        /* Grid 애니메이션을 활용한 슬라이드 토글 CSS */
+        .slide-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease, margin-top 0.3s ease, opacity 0.3s ease; opacity: 0; margin-top: 0; }
+        .slide-wrapper.open { grid-template-rows: 1fr; opacity: 1; margin-top: 16px; }
+        .slide-inner { overflow: hidden; }
+        .arrow-icon { display: inline-block; transition: transform 0.3s ease; }
+        .arrow-icon.open { transform: rotate(180deg); }
     </style>
 </head>
 <body>
@@ -76,10 +90,46 @@
     {% endif %}
 
     <script>
+        // 공통 슬라이드 토글 제어 함수
+        window.toggleSlide = function(wrapperId, arrowId) {
+            const wrapper = document.getElementById(wrapperId);
+            const arrow = document.getElementById(arrowId);
+            if(wrapper) wrapper.classList.toggle('open');
+            if(arrow) arrow.classList.toggle('open');
+        };
+
+        // 스켈레톤 마크업 템플릿
+        const skeletonHtml = `
+            <div class="skeleton-card">
+                <div class="skeleton skeleton-text short"></div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text"></div>
+            </div>
+            <div class="skeleton-card">
+                <div style="display:flex; gap:12px; align-items:center; margin-bottom:16px;">
+                    <div class="skeleton skeleton-circle"></div>
+                    <div style="flex:1;">
+                        <div class="skeleton skeleton-text short"></div>
+                        <div class="skeleton skeleton-text" style="margin-bottom:0;"></div>
+                    </div>
+                </div>
+                <div class="skeleton skeleton-text"></div>
+                <div class="skeleton skeleton-text short"></div>
+            </div>
+            <div class="skeleton-card">
+                <div class="skeleton skeleton-text short"></div>
+                <div class="skeleton skeleton-text"></div>
+            </div>
+        `;
+
         async function navigate(url, pushState = true) {
             const bar = document.getElementById('nprogress');
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
+            
+            // 페이지 전환 시 즉각적인 스켈레톤 로딩 렌더링
+            document.getElementById('app-content').innerHTML = skeletonHtml;
+            
             try {
                 const response = await fetch(url);
                 const html = await response.text();
@@ -128,6 +178,10 @@
             const bar = document.getElementById('nprogress');
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
+            
+            // 폼 전환(GET 검색 등) 시 스켈레톤 적용
+            document.getElementById('app-content').innerHTML = skeletonHtml;
+            
             try {
                 const formData = new FormData(form);
                 const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;

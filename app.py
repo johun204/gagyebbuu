@@ -36,7 +36,6 @@ KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
 @app.before_request
 def require_login():
-    # 매 요청마다 세션을 수정 상태로 만들어 쿠키 만료일을 365일 뒤로 계속 연장
     if 'user_id' in session:
         session.permanent = True
         session.modified = True
@@ -625,9 +624,12 @@ def search():
     keyword = request.args.get('keyword')
     min_amount = request.args.get('min_amount')
     max_amount = request.args.get('max_amount')
+    tx_type = request.args.get('tx_type') # 신규 검색 조건 (수입/지출)
     
     query = Transaction.query.filter_by(ledger_id=ledger.id)
     
+    if tx_type in ['수입', '지출']:
+        query = query.filter(Transaction.tx_type == tx_type)
     if start_date:
         st = datetime.strptime(start_date, "%Y-%m-%d")
         query = query.filter(Transaction.datetime_val >= st)

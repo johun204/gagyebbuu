@@ -22,7 +22,6 @@
     {% if ledger.monthly_budget > 0 or monthly_expense > 0 or budget_status %}
     <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
 
-        <!-- 전체 예산 (누적 가로막대 적용) -->
         {% if ledger.monthly_budget > 0 %}
         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
             전체 예산 <span style="{% if monthly_expense > ledger.monthly_budget %}color: #fe493d;{% endif %}">({{ '{:,}'.format(monthly_expense) }} / {{ '{:,}'.format(ledger.monthly_budget) }})</span>
@@ -36,7 +35,6 @@
             {% endfor %}
         </div>
         {% elif monthly_expense > 0 %}
-        <!-- 전체 예산이 0원이고 지출만 있는 경우 -->
         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
             총 지출 <span style="color: var(--color-secondary);">({{ '{:,}'.format(monthly_expense) }})</span>
         </div>
@@ -47,7 +45,6 @@
         </div>
         {% endif %}
         
-        <!-- 1. 예산이 설정된 카테고리 (기본 노출) -->
         {% for b in budget_status if b.budget > 0 %}
         <div style="margin-bottom: 8px;">
             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
@@ -67,36 +64,39 @@
         </div>
         {% endfor %}
 
-        <!-- 2. 예산 미설정(0원) 카테고리 (토글 숨김) -->
+        <!-- 슬라이딩 애니메이션이 적용된 추가 예산 보기 -->
         {% set unbudgeted_count = budget_status | selectattr('budget', 'equalto', 0) | list | length %}
         {% if unbudgeted_count > 0 %}
-        <div id="extra-budget-container" style="display: none; margin-top: 16px; border-top: 1px dashed var(--color-line); padding-top: 16px;">
-            {% for b in budget_status if b.budget == 0 %}
-            <div style="margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
-                    <span>{{ b.name }}</span>
-                    <span>{{ '{:,}'.format(b.spent) }}</span>
-                </div>
-                <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
-                    {% for payer, p_amount in b.payers.items() %}
-                        {% if b.spent > 0 %}
-                        <div style="height: 100%; width: {{ (p_amount / b.spent * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
-                        {% endif %}
+        
+        <div id="extra-budget-wrapper" class="slide-wrapper">
+            <div class="slide-inner">
+                <div style="border-top: 1px dashed var(--color-line); padding-top: 16px;">
+                    {% for b in budget_status if b.budget == 0 %}
+                    <div style="margin-bottom: 8px;">
+                        <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
+                            <span>{{ b.name }}</span>
+                            <span>{{ '{:,}'.format(b.spent) }}</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
+                            {% for payer, p_amount in b.payers.items() %}
+                                {% if b.spent > 0 %}
+                                <div style="height: 100%; width: {{ (p_amount / b.spent * 100) }}%; background: {{ payer_color_map[payer] }};"></div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
                     {% endfor %}
                 </div>
             </div>
-            {% endfor %}
         </div>
         
-        <!-- 전체보기 토글 버튼 -->
         <div style="text-align: center; margin-top: 12px;">
-            <button type="button" class="chip" id="toggle-budget-btn" onclick="window.toggleExtraBudget()" style="background: transparent; color: var(--color-secondary); border: 1px solid var(--color-line); font-size: 12px; padding: 6px 16px;">
-                예산 미설정 분류 보기 ▼
+            <button type="button" class="chip" onclick="window.toggleSlide('extra-budget-wrapper', 'budget-arrow')" style="background: transparent; color: var(--color-secondary); border: 1px solid var(--color-line); font-size: 12px; padding: 6px 16px;">
+                예산 미설정 분류 보기 <span id="budget-arrow" class="arrow-icon">▼</span>
             </button>
         </div>
         {% endif %}
 
-        <!-- 거래자별 색상 범례 표시 -->
         {% if payer_color_map %}
         <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; margin-bottom: 4px; justify-content: center; align-items: center; background: rgba(0,0,0,0.02); padding: 10px 12px; border-radius: 8px;">
             <span style="font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-right: 4px;">참여자</span>
@@ -133,23 +133,12 @@
 
 <script>
     {
-        window.toggleExtraBudget = function() {
-            const container = document.getElementById('extra-budget-container');
-            const btn = document.getElementById('toggle-budget-btn');
-            if (container.style.display === 'none') {
-                container.style.display = 'block';
-                btn.innerText = '예산 미설정 분류 접기 ▲';
-            } else {
-                container.style.display = 'none';
-                btn.innerText = '예산 미설정 분류 보기 ▼';
-            }
-        };
-
         setTimeout(() => {
             window.appCharts = window.appCharts || {};
             if(window.appCharts.catChart) window.appCharts.catChart.destroy();
             if(window.appCharts.dowChart) window.appCharts.dowChart.destroy();
 
+            const payerColorMap = {{ payer_color_map | tojson | safe }};
             const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
 
             const catExpense = {{ cat_expense_total | tojson | safe }};
