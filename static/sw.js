@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v1';
+const CACHE_NAME = 'gagye-bbu-cache-v2';
 const STATIC_URLS = [
     '/',
     '/home',
@@ -34,16 +34,20 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
     
+    // API 통신은 캐시하지 않고 항상 네트워크 요청
+    if (event.request.url.includes('/api/')) {
+        return;
+    }
+    
     event.respondWith(
         fetch(event.request)
             .then(response => {
-                // 온라인 시 캐시 갱신 (Network First)
                 let resClone = response.clone();
                 caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
                 return response;
             })
             .catch(() => {
-                // 오프라인 시 캐시 매칭 (스켈레톤 및 오프라인 화면 표시 위함)
+                // 오프라인 상태 시 캐시된 화면 및 스켈레톤을 렌더링하도록 맵핑
                 return caches.match(event.request).then(res => {
                     if (res) return res;
                     if (event.request.mode === 'navigate') {

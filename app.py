@@ -34,7 +34,6 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
-# PWA Service Worker 서빙 라우트 추가 (최상위 스코프를 위함)
 @app.route('/sw.js')
 def serve_sw():
     return app.send_static_file('sw.js')
@@ -222,43 +221,35 @@ def leave_ledger():
         
     return redirect(url_for('onboarding'))
 
-@app.route('/')
-@app.route('/home')
-def home():
-    user = User.query.get(session['user_id'])
-    if not user.ledger_id: return redirect(url_for('onboarding'))
+# --- 홈 데이터 구성 헬퍼 함수 ---
+def build_home_data(user_id, y, m):
+    user = User.query.get(user_id)
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    
-    t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
     all_tx = Transaction.query.filter_by(ledger_id=ledger.id).all()
-    txs = [tx for tx in all_tx if tx.datetime_val.year == t_year and tx.datetime_val.month == t_month and not tx.exclude_analysis]
+    txs = [tx for tx in all_tx if tx.datetime_val.year == y and tx.datetime_val.month == m and not tx.exclude_analysis]
     
-    monthly_income = 0
-    monthly_expense = 0
+    monthly_income = sum(tx.amount for tx in txs if tx.tx_type == '수입')
+    monthly_expense = sum(tx.amount for tx in txs if tx.tx_type == '지출')
+    
     cat_names = [c.name for c in categories]
-    dow_names = ['월', '화', '수', '목', '금', '토', '일']
     dow_expense_by_cat = {c: [0]*7 for c in cat_names}
     cat_expense_total = {c: 0 for c in cat_names}
     cat_payer_expense = {c: {} for c in cat_names}
     payer_expense = {}
     
     for tx in txs:
-        if tx.tx_type == '수입':
-            monthly_income += tx.amount
-        else:
-            monthly_expense += tx.amount
+        if tx.tx_type == '지출':
             c_name = tx.category.name
-            
-            if c_name in cat_expense_total:
-                cat_expense_total[c_name] += tx.amount
-                dow_idx = tx.datetime_val.weekday()
-                dow_expense_by_cat[c_name][dow_idx] += tx.amount
-                cat_payer_expense[c_name][tx.transactor] = cat_payer_expense[c_name].get(tx.transactor, 0) + tx.amount
-            else:
-                cat_expense_total[c_name] = tx.amount
-                cat_payer_expense[c_name] = {tx.transactor: tx.amount}
+            if c_name not in cat_expense_total:
+                cat_expense_total[c_name] = 0
+                dow_expense_by_cat[c_name] = [0]*7
+                cat_payer_expense[c_name] = {}
                 
+            cat_expense_total[c_name] += tx.amount
+            dow_idx = tx.datetime_val.weekday()
+            dow_expense_by_cat[c_name][dow_idx] += tx.amount
+            cat_payer_expense[c_name][tx.transactor] = cat_payer_expense[c_name].get(tx.transactor, 0) + tx.amount
             payer_expense[tx.transactor] = payer_expense.get(tx.transactor, 0) + tx.amount
 
     theme_colors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84']
@@ -279,13 +270,38 @@ def home():
                     'spent': spent,
                     'payers': cat_payer_expense.get(c.name, {})
                 })
+                
+    return {
+        'year': y, 'month': m,
+        'monthly_income': monthly_income,
+        'monthly_expense': monthly_expense,
+        'ledger_budget': ledger.monthly_budget,
+        'budget_status': budget_status,
+        'payer_expense': payer_expense,
+        'payer_color_map': payer_color_map,
+        'cat_expense_total': cat_expense_total,
+        'dow_expense_by_cat': dow_expense_by_cat
+    }
+
+@app.route('/')
+@app.route('/home')
+def home():
+    user = User.query.get(session['user_id'])
+    if not user.ledger_id: return redirect(url_for('onboarding'))
+    ledger = Ledger.query.get(user.ledger_id)
+    
+    t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
+    initial_data = build_home_data(user.id, t_year, t_month)
             
     return render_template('home.html', ledger=ledger, 
-                           monthly_income=monthly_income, monthly_expense=monthly_expense,
-                           cat_expense_total=cat_expense_total, dow_expense_by_cat=dow_expense_by_cat,
-                           payer_expense=payer_expense, budget_status=budget_status,
-                           payer_color_map=payer_color_map,
+                           initial_data=initial_data,
                            t_year=t_year, t_month=t_month, p_y=p_y, p_m=p_m, n_y=n_y, n_m=n_m, current_tab='home')
+
+@app.route('/api/home_data')
+def api_home_data():
+    y = int(request.args.get('year'))
+    m = int(request.args.get('month'))
+    return jsonify(build_home_data(session['user_id'], y, m))
 
 @app.route('/calendar')
 def calendar():

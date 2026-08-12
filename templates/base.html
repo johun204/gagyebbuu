@@ -60,11 +60,12 @@
         dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
         dialog input[type="time"], dialog input[type="date"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
 
-        /* 스켈레톤 기본 스타일 */
+        /* 고급 스켈레톤 로딩 UI CSS */
         .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
         .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
         .skeleton-text.short { width: 50%; }
+        .skeleton-circle { width: 40px; height: 40px; border-radius: 50%; }
 
         /* 슬라이딩 아코디언 스타일 */
         .slide-wrapper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.3s ease, margin-top 0.3s ease, opacity 0.3s ease; opacity: 0; margin-top: 0; }
@@ -88,14 +89,13 @@
     {% endif %}
 
     <script>
-        // PWA Service Worker 등록
+        // PWA Service Worker 등록 (오프라인 캐싱 지원)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW registration failed:', err));
             });
         }
 
-        // 공통 슬라이드 토글 제어
         window.toggleSlide = function(wrapperId, arrowId) {
             const wrapper = document.getElementById(wrapperId);
             const arrow = document.getElementById(arrowId);
@@ -103,10 +103,23 @@
             if(arrow) arrow.classList.toggle('open');
         };
 
-        // 페이지별 구조를 반영한 스켈레톤 HTML 정의
+        // 페이지별 디테일 스켈레톤 설계 (소제목과 화면별 구조를 뚜렷하게 반영)
         const skeletonHome = `
             <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
-            <div class="card"><h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2><div style="display: flex; gap: 12px; margin-bottom: 16px;"><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div></div><div class="skeleton" style="height:30px; border-radius:4px;"></div></div>
+            <div class="card">
+                <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
+                <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                    <div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div>
+                </div>
+                <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
+                    <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: 4px;"></div>
+                    <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
+                    <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
+                    <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+                </div>
+            </div>
             <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
         `;
 
@@ -123,14 +136,28 @@
 
         const skeletonTransactions = `
             <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
-            <div class="card" style="margin-bottom: 8px;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"><h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3></div><div class="skeleton" style="height:200px; border-radius:8px;"></div></div>
-            <div class="card"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div>
+            <div class="card" style="margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"><h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3><div class="skeleton" style="width: 80px; height: 28px; border-radius: 6px;"></div></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 0 0 120px; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 0 0 80px; height: 44px; border-radius: 6px;"></div></div>
+                <div class="skeleton" style="width: 100%; height: 44px; border-radius: 16px; margin-top: 16px;"></div>
+            </div>
+            <div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div>
         `;
 
         const skeletonSearch = `
             <div style="margin-bottom: var(--spacing-lg);"><a href="#" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a></div>
-            <div class="card"><h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2><div class="skeleton" style="height:150px; border-radius:8px;"></div></div>
-            <div class="card" style="background: transparent; border: none; padding: 0;"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3><div><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div></div>
+            <div class="card">
+                <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
+                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
+                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
+                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
+                <div style="display: flex; gap: 8px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
+            </div>
+            <div class="card" style="background: transparent; border: none; padding: 0;"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3><div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div></div>
         `;
 
         const skeletonSettings = `
@@ -157,7 +184,7 @@
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
             
-            // 페이지 이동 구조에 맞는 맞춤형 스켈레톤 즉시 표시
+            // 페이지 URL에 맞춰 섬세하게 설계된 스켈레톤 즉각 표출
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
             
             try {
@@ -212,7 +239,7 @@
             const formData = new FormData(form);
             const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;
             
-            // 폼 제출(조회 폼 포함) 시 해당 페이지 구조의 스켈레톤 띄우기
+            // 폼 전환/제출 중에도 구조화된 스켈레톤 반영
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
             
             try {
