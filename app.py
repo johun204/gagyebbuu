@@ -8,10 +8,10 @@ from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
-# config.json을 완전히 제거하고 Vercel 환경 변수로만 작동합니다.
 app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
+# 세션 유지 기간을 365일로 설정
+app.permanent_session_lifetime = timedelta(days=365)
 
-# Neon PostgreSQL 연결 문자열 처리 (SQLAlchemy 호환을 위해 postgres:// 를 postgresql:// 로 변경)
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
 if db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
@@ -111,6 +111,8 @@ def kakao_callback():
         db.session.add(user)
         db.session.commit()
         
+    # 로그인 성공 시 세션을 영구적으로 설정하여 브라우저 종료 시에도 유지
+    session.permanent = True
     session['user_id'] = user.id
     
     pending_invite = session.get('pending_invite')
