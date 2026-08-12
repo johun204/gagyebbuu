@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>가계쀼 - 공유 가계부</title>
+    
+    <!-- 링크 공유 시 표시되는 Open Graph 미리보기 메타 태그 -->
+    <meta property="og:title" content="가계쀼 - 공유 가계부">
+    <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
+    <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
+    <meta property="og:url" content="{{ request.host_url }}">
+    
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
@@ -105,7 +112,7 @@
         window.addEventListener('popstate', (e) => { if(e.state) navigate(window.location.pathname + window.location.search, false); });
         
         document.addEventListener('click', e => { 
-            if (e.defaultPrevented) return; // 확인창에서 취소 등 이벤트 캔슬 시 라우팅 차단
+            if (e.defaultPrevented) return; 
             const link = e.target.closest('a'); 
             if (link && link.origin === window.location.origin && !link.classList.contains('no-spa') && !link.hasAttribute('download')) { 
                 e.preventDefault(); 
@@ -114,7 +121,7 @@
         });
         
         document.addEventListener('submit', async e => {
-            if (e.defaultPrevented) return; // 확인창에서 취소 등 폼 제출 취소 시 전송 차단
+            if (e.defaultPrevented) return; 
             const form = e.target;
             if (form.classList.contains('no-spa')) return;
             e.preventDefault();
