@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom: var(--spacing-lg);">
+    <a href="/transactions" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a>
+</div>
+<div class="card">
+    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 검색</h2>
+    <form action="/search" method="GET">
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="date" name="start_date" class="input-field" value="{{ request.args.get('start_date', '') }}"></div>
+            <span>~</span>
+            <div class="input-wrapper"><input type="date" name="end_date" class="input-field" value="{{ request.args.get('end_date', '') }}"></div>
+        </div>
+        <div class="flex-row">
+            <div class="input-wrapper">
+                <select name="category_id" class="input-field">
+                    <option value="">전체 분류</option>
+                    {% for cat in categories %}<option value="{{ cat.id }}" {% if request.args.get('category_id') == cat.id|string %}selected{% endif %}>{{ cat.name }}</option>{% endfor %}
+                </select>
+            </div>
+            <button type="submit" class="btn-action" style="flex: 1;">검색</button>
+            <a href="/search" class="chip" style="padding: 12px; margin-left: 8px;">초기화</a>
+        </div>
+    </form>
+</div>
+
+<div class="card">
+    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3>
+    <div style="overflow-x: auto;">
+        <table style="width: 100%; min-width: 500px; text-align: left; border-collapse: collapse;">
+            <thead><tr><th style="padding-bottom: 8px;">일자</th><th>거래자/분류</th><th>제목(메모)</th><th style="text-align: right;">금액</th><th>기록자</th></tr></thead>
+            <tbody>
+                {% for tx in transactions %}
+                <tr style="border-top: 1px solid var(--color-line);">
+                    <td style="padding: 8px 0;">{{ tx.datetime_val.strftime('%Y-%m-%d') }}</td>
+                    <td>🧑 {{ tx.transactor }}<br>🏷️ {{ tx.category.name }}</td>
+                    <td>{{ tx.title }}<br><span style="font-size:11px; color:var(--color-muted);">{{ tx.memo }}</span></td>
+                    <td style="font-weight: 700; text-align: right; color: {% if tx.tx_type == '수입' %}var(--color-primary){% else %}#fe493d{% endif %};">
+                        {% if tx.tx_type == '수입' %}+{% else %}-{% endif %}{{ '{:,}'.format(tx.amount) }}원
+                    </td>
+                    <td>{{ tx.user.nickname }}</td>
+                </tr>
+                {% else %}<tr><td colspan="5" style="text-align: center; padding: 16px 0; color: var(--color-muted);">검색 결과가 없습니다.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

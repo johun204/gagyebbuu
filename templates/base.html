@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>가계쀼 - 공유 가계부</title>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icon-192.png">
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
+            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
+            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; 
+            padding: var(--spacing-base); 
+            padding-bottom: 130px; 
+            max-width: 768px; margin: 0 auto; 
+        }
+
+        #nprogress { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--color-action); z-index: 9999; transform: scaleX(0); transform-origin: left; transition: transform 0.2s ease; }
+
+        .bottom-nav { 
+            position: fixed; bottom: 0; left: 0; right: 0; 
+            background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); 
+            border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; 
+            z-index: 1000; 
+            padding-bottom: calc(env(safe-area-inset-bottom) + 16px); 
+            padding-top: 10px; 
+            box-sizing: content-box; 
+        }
+        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
+        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
+
+        .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--color-action); color: var(--color-canvas); border-radius: var(--radius-action); padding: 12px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; flex-shrink: 0; }
+        .chip { display: inline-flex; align-items: center; justify-content: center; background-color: rgba(19, 189, 126, 0.15); color: var(--color-primary); border-radius: var(--radius-chip); padding: 6px 12px; font-size: 14px; font-weight: 500; border: none; text-decoration: none; cursor: pointer; flex-shrink: 0; }
+        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .input-field, select { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-action); padding: 12px 16px; font-size: 16px; color: var(--color-foreground); outline: none; font-family: var(--font-sans); width: 100%; box-sizing: border-box; min-width: 0; }
+        .input-field:focus, select:focus { border-color: var(--color-primary); }
+        
+        .flex-row { display: flex; gap: var(--spacing-sm); align-items: center; flex-wrap: wrap; margin-bottom: var(--spacing-md); }
+        .flex-row > .input-wrapper { flex: 1 1 130px; box-sizing: border-box; min-width: 0; }
+        
+        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
+        .month-selector h3 { font-size: 20px; font-weight: 700; }
+        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
+
+        dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+        dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
+        dialog input[type="time"], dialog input[type="date"] { width: 100%; box-sizing: border-box; -webkit-appearance: none; appearance: none; }
+    </style>
+</head>
+<body>
+    <div id="nprogress"></div>
+    <main id="app-content">{% block content %}{% endblock %}</main>
+
+    {% if session.get('user_id') %}
+    <div class="bottom-nav">
+        <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}"><span style="font-size:20px;">🏠</span>홈</a>
+        <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}"><span style="font-size:20px;">📅</span>달력</a>
+        <a href="/transactions" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}"><span style="font-size:20px;">📝</span>내역</a>
+        <a href="/settings" class="nav-link {% if current_tab == 'settings' %}active{% endif %}"><span style="font-size:20px;">⚙️</span>설정</a>
+    </div>
+    {% endif %}
+
+    <script>
+        async function navigate(url, pushState = true) {
+            const bar = document.getElementById('nprogress');
+            bar.style.transition = 'transform 0.2s ease';
+            bar.style.transform = 'scaleX(0.4)';
+            try {
+                const response = await fetch(url);
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                document.title = doc.title;
+                if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
+                if(window.txObserver) window.txObserver.disconnect();
+                
+                document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                if(pushState) window.history.pushState({path: url}, '', url);
+                
+                document.querySelectorAll('.bottom-nav a').forEach(a => {
+                    a.classList.remove('active');
+                    if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
+                });
+
+                const scripts = document.getElementById('app-content').querySelectorAll('script');
+                scripts.forEach(s => {
+                    const newScript = document.createElement('script');
+                    Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(s.innerHTML));
+                    s.parentNode.replaceChild(newScript, s);
+                });
+            } catch (err) { window.location.href = url; } 
+            finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
+        }
+
+        window.addEventListener('popstate', (e) => { if(e.state) navigate(window.location.pathname + window.location.search, false); });
+        document.addEventListener('click', e => { const link = e.target.closest('a'); if (link && link.origin === window.location.origin && !link.classList.contains('no-spa') && !link.hasAttribute('download')) { e.preventDefault(); navigate(link.href); } });
+        document.addEventListener('submit', async e => {
+            const form = e.target;
+            if (form.classList.contains('no-spa')) return;
+            e.preventDefault();
+            const bar = document.getElementById('nprogress');
+            bar.style.transition = 'transform 0.2s ease';
+            bar.style.transform = 'scaleX(0.4)';
+            try {
+                const formData = new FormData(form);
+                const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;
+                const response = await fetch(url, { method: form.method, body: form.method.toUpperCase() === 'POST' ? formData : null, redirect: 'follow' });
+                const html = await response.text();
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                
+                document.title = doc.title;
+                if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
+                if(window.txObserver) window.txObserver.disconnect();
+                
+                document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                window.history.pushState({path: response.url}, '', response.url);
+                
+                const scripts = document.getElementById('app-content').querySelectorAll('script');
+                scripts.forEach(s => {
+                    const newScript = document.createElement('script');
+                    Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(s.innerHTML));
+                    s.parentNode.replaceChild(newScript, s);
+                });
+            } catch (err) { form.submit(); } 
+            finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
+        });
+    </script>
+</body>
+</html>

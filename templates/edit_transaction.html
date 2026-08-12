@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+    .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
+</style>
+
+<div class="card" style="margin-top: 20px;">
+    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 수정</h2>
+    <form action="/transaction/{{ tx.id }}/edit" method="POST">
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            <button type="button" id="btn-expense-edit" class="btn-tab {% if tx.tx_type == '지출' %}active{% endif %}" onclick="window.setTxTypeEdit('지출')">지출</button>
+            <button type="button" id="btn-income-edit" class="btn-tab {% if tx.tx_type == '수입' %}active{% endif %}" onclick="window.setTxTypeEdit('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="tx_type_edit" value="{{ tx.tx_type }}">
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="number" name="amount" class="input-field" value="{{ tx.amount }}" required></div>
+        </div>
+
+        <div class="flex-row">
+            <div class="input-wrapper" style="flex: 0 0 120px;">
+                <select name="transactor" required class="input-field">
+                    {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if tx.transactor == u.nickname %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
+                    <option value="함께" {% if tx.transactor == '함께' %}selected{% endif %}>함께</option>
+                </select>
+            </div>
+            <div class="input-wrapper"><input type="text" name="title" class="input-field" value="{{ tx.title }}" placeholder="제목" required></div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper">
+                <select name="category_id" class="input-field">
+                    <option value="">미분류</option>
+                    {% for cat in categories if cat.name != '미분류' %}
+                        <option value="{{ cat.id }}" {% if cat.id == tx.category_id %}selected{% endif %}>{{ cat.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" class="input-field" value="{{ tx.datetime_val.strftime('%Y-%m-%d') }}" required style="flex: 1;">
+                <input type="hidden" name="time" id="tx_time_edit" value="{{ tx.datetime_val.strftime('%H:%M') }}">
+                <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" style="padding: 10px 12px; font-size: 16px;">🕒</button>
+            </div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 12px;">
+            <div class="input-wrapper"><input type="text" name="memo" class="input-field" value="{{ tx.memo }}" placeholder="상세 메모 (선택)"></div>
+        </div>
+        
+        <div class="flex-row" style="margin-bottom: 16px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" name="exclude_analysis" {% if tx.exclude_analysis %}checked{% endif %} style="width:16px; height:16px;"> 지출 분석에서 제외하기
+            </label>
+        </div>
+        
+        <div class="flex-row" style="justify-content: center; margin-top: 16px;">
+            <a href="/transactions" class="chip" style="color: var(--color-secondary); background: var(--color-line);">취소</a>
+            <button type="submit" class="btn-action">수정 완료</button>
+        </div>
+    </form>
+</div>
+
+<!-- 시간 설정 다이얼로그 -->
+<dialog id="time-dialog-edit">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
+        <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="time" id="time_picker_input_edit" class="input-field" value="{{ tx.datetime_val.strftime('%H:%M') }}"></div>
+    </div>
+    <button type="button" class="btn-action" style="width:100%;" onclick="window.setTimeEdit()">확인</button>
+</dialog>
+
+<script>
+    {
+        window.setTxTypeEdit = function(type) {
+            document.getElementById('tx_type_edit').value = type;
+            if (type === '지출') {
+                document.getElementById('btn-expense-edit').classList.add('active');
+                document.getElementById('btn-income-edit').classList.remove('active');
+            } else {
+                document.getElementById('btn-income-edit').classList.add('active');
+                document.getElementById('btn-expense-edit').classList.remove('active');
+            }
+        };
+
+        window.setTimeEdit = function() {
+            document.getElementById('tx_time_edit').value = document.getElementById('time_picker_input_edit').value;
+            document.getElementById('time-dialog-edit').close();
+        };
+    }
+</script>
+{% endblock %}
