@@ -16,7 +16,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
-        // [개선] 500 에러 발생 시 Exponential Backoff (1초, 2초, 4초) 재시도 로직 적용
+        // [개선] 500 에러 발생 시 Exponential Backoff (0.5초, 1초, 2초, 4초) 재시도 및 UI 팝업 로직
         const originalFetch = window.fetch;
         window.fetch = async function(...args) {
             let [resource, config] = args;
@@ -29,9 +29,9 @@
             
             config.headers = headers;
             
-            const maxRetries = 3;
+            const maxRetries = 4; // 0.5, 1, 2, 4초 총 4회 재시도
             let attempt = 0;
-            let delay = 1000; // 초기 대기 시간 1초 (1000ms)
+            let delay = 500; // 초기 대기 시간 0.5초 (500ms)
 
             while (attempt <= maxRetries) {
                 try {
@@ -49,11 +49,14 @@
                         if (attempt < maxRetries) {
                             attempt++;
                             await new Promise(resolve => setTimeout(resolve, delay));
-                            delay *= 2; // 1초 -> 2초 -> 4초로 지수적 증가
+                            delay *= 2; // 0.5초 -> 1초 -> 2초 -> 4초로 지수적 증가
                             continue;
                         } else {
-                            // 3회 모두 실패 시 튕김 방지를 위해 조용히 새로고침 수행
-                            window.location.reload();
+                            // 4회 모두 실패 시 alert 대신 예쁜 모달 팝업 표시
+                            const errorDialog = document.getElementById('db-error-dialog');
+                            if (errorDialog && !errorDialog.open) {
+                                errorDialog.showModal();
+                            }
                             return Promise.reject('Server Error');
                         }
                     }
@@ -69,6 +72,10 @@
                         delay *= 2;
                         continue;
                     } else {
+                        const errorDialog = document.getElementById('db-error-dialog');
+                        if (errorDialog && !errorDialog.open) {
+                            errorDialog.showModal();
+                        }
                         throw error;
                     }
                 }
@@ -150,6 +157,7 @@
         {% endif %}
     </div>
 
+    <!-- 월 이동 공통 다이얼로그 -->
     <dialog id="global-month-picker">
         <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
             <h3 style="font-size: 18px; font-weight: 700;">월 이동</h3>
@@ -159,6 +167,18 @@
             <div class="input-wrapper"><input type="month" id="global_month_input" class="input-field"></div>
         </div>
         <button type="button" class="btn-action" style="width:100%; margin-top: 12px;" onclick="window.jumpToMonth()">이동하기</button>
+    </dialog>
+
+    <!-- DB 연결 지연 안내 다이얼로그 -->
+    <dialog id="db-error-dialog">
+        <div style="text-align: center; padding: 10px 0;">
+            <div style="font-size: 40px; margin-bottom: 16px;">⏳</div>
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">DB 연결 지연</h3>
+            <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 24px; line-height: 1.5;">
+                현재 서버 연결이 원활하지 않습니다.<br>아래 버튼을 눌러 다시 시도해주세요.
+            </p>
+            <button type="button" class="btn-action" style="width: 100%;" onclick="document.getElementById('db-error-dialog').close(); window.location.reload();">새로고침 시도하기</button>
+        </div>
     </dialog>
 
     <script>
