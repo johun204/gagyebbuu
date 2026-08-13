@@ -16,9 +16,10 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
+        // [개선] 500 에러 발생 시 Exponential Backoff (1초, 2초, 4초) 재시도 로직 적용
         const originalFetch = window.fetch;
-        window.fetch = async function() {
-            let [resource, config] = arguments;
+        window.fetch = async function(...args) {
+            let [resource, config] = args;
             config = config || {};
             const headers = new Headers(config.headers || {});
             
@@ -28,23 +29,50 @@
             
             config.headers = headers;
             
-            const response = await originalFetch(resource, config);
-            
-            // [방어코드] 미인증 에러 시에만 로그인 화면으로 전환
-            if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
-                localStorage.removeItem('jwt_token');
-                window.location.href = '/login';
-                return Promise.reject('Unauthorized');
+            const maxRetries = 3;
+            let attempt = 0;
+            let delay = 1000; // 초기 대기 시간 1초 (1000ms)
+
+            while (attempt <= maxRetries) {
+                try {
+                    const response = await originalFetch(resource, config);
+                    
+                    // 미인증(로그인 풀림) 감지 시 즉시 처리
+                    if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
+                        localStorage.removeItem('jwt_token');
+                        window.location.href = '/login';
+                        return Promise.reject('Unauthorized');
+                    }
+                    
+                    // 500번대 서버 에러 발생 시 재시도 로직
+                    if (response.status >= 500) {
+                        if (attempt < maxRetries) {
+                            attempt++;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            delay *= 2; // 1초 -> 2초 -> 4초로 지수적 증가
+                            continue;
+                        } else {
+                            // 3회 모두 실패 시 튕김 방지를 위해 조용히 새로고침 수행
+                            window.location.reload();
+                            return Promise.reject('Server Error');
+                        }
+                    }
+                    
+                    // 정상 응답
+                    return response;
+                    
+                } catch (error) {
+                    // 네트워크 단절 등 예외 상황 시에도 재시도 처리
+                    if (attempt < maxRetries) {
+                        attempt++;
+                        await new Promise(resolve => setTimeout(resolve, delay));
+                        delay *= 2;
+                        continue;
+                    } else {
+                        throw error;
+                    }
+                }
             }
-            
-            // [방어코드] 백엔드 500 오류 시 스켈레톤 프리징 방지 및 로그인화면 오작동 차단
-            if (response.status >= 500) {
-                alert('서버 접속 지연이 발생했습니다. 다시 시도해주세요.');
-                window.location.reload();
-                return Promise.reject('Server Error');
-            }
-            
-            return response;
         };
     </script>
     
@@ -260,7 +288,6 @@
             try {
                 const response = await fetch(url);
                 
-                // [방어코드] 만약 백엔드가 200 응답이라 하더라도 URL이 /login 으로 떨어졌다면 로그아웃 됨을 인지
                 if (response.url && response.url.includes('/login') && !window.location.pathname.includes('/login')) {
                     localStorage.removeItem('jwt_token');
                     window.location.href = '/login';
