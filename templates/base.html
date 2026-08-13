@@ -101,14 +101,17 @@
     <div id="nprogress"></div>
     <main id="app-content">{% block content %}{% endblock %}</main>
 
-    {% if current_user_id and has_ledger %}
-    <div class="bottom-nav">
-        <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}"><span style="font-size:20px;">🏠</span>홈</a>
-        <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}"><span style="font-size:20px;">📅</span>달력</a>
-        <a href="/transactions" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}"><span style="font-size:20px;">📝</span>내역</a>
-        <a href="/settings" class="nav-link {% if current_tab == 'settings' %}active{% endif %}"><span style="font-size:20px;">⚙️</span>설정</a>
+    <!-- 네비게이션 컨테이너를 추가하여 가계부 생성 후에도 즉시 갱신되도록 처리 -->
+    <div id="nav-container">
+        {% if current_user_id and has_ledger %}
+        <div class="bottom-nav">
+            <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}"><span style="font-size:20px;">🏠</span>홈</a>
+            <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}"><span style="font-size:20px;">📅</span>달력</a>
+            <a href="/transactions" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}"><span style="font-size:20px;">📝</span>내역</a>
+            <a href="/settings" class="nav-link {% if current_tab == 'settings' %}active{% endif %}"><span style="font-size:20px;">⚙️</span>설정</a>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <dialog id="global-month-picker">
         <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
@@ -256,6 +259,11 @@
                 if(window.txObserver) window.txObserver.disconnect();
                 
                 document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                
+                // 네비게이션 컨테이너도 함께 업데이트 (가계부 생성 시 즉시 노출용)
+                const docNav = doc.getElementById('nav-container');
+                if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
+
                 if(pushState) window.history.pushState({path: url}, '', url);
                 
                 document.querySelectorAll('.bottom-nav a').forEach(a => {
@@ -300,7 +308,6 @@
                 formData.append(submitter.name, submitter.value);
             }
             
-            // DOM Clobbering을 방지하기 위해 getAttribute 사용
             const actionUrl = form.getAttribute('action') || window.location.pathname;
             const methodType = (form.getAttribute('method') || 'GET').toUpperCase();
             
@@ -327,8 +334,18 @@
                     if(window.txObserver) window.txObserver.disconnect();
                     
                     document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+                    
+                    // 폼 제출 시에도 네비게이션 컨테이너 업데이트
+                    const docNav = doc.getElementById('nav-container');
+                    if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
+
                     window.history.pushState({path: response.url}, '', response.url);
                     
+                    document.querySelectorAll('.bottom-nav a').forEach(a => {
+                        a.classList.remove('active');
+                        if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
+                    });
+
                     const scripts = document.getElementById('app-content').querySelectorAll('script');
                     scripts.forEach(s => {
                         const newScript = document.createElement('script');
