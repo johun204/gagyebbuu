@@ -1,29 +1,36 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card" style="max-width: 400px; margin: 40px auto;">
-    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">가계부 시작하기</h2>
-    
-    {% if error %}
-    <div style="background-color: rgba(254, 73, 61, 0.1); color: #fe493d; padding: 12px; border-radius: var(--radius-chip); font-size: 14px; margin-bottom: 16px; text-align: center;">
-        {{ error }}
-    </div>
-    {% endif %}
+<h2 style="text-align: center; margin-top: 40px; font-size: 24px; font-weight: 800; color: var(--color-primary);">가계쀼 시작하기</h2>
+<p style="text-align: center; color: var(--color-secondary); font-size: 14px; margin-bottom: 32px;">환영합니다! 가계부를 생성하거나 초대 코드로 참여해주세요.</p>
 
+<div class="card">
     <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">새 가계부 만들기</h3>
-    <form method="POST" style="display: flex; flex-direction: column; gap: var(--spacing-md); margin-bottom: 32px;">
+    <form action="/onboarding" method="POST">
+        <!-- SPA 통신 시 확실한 분기를 위한 hidden input -->
         <input type="hidden" name="action" value="create">
-        <input type="text" name="ledger_name" class="input-field" placeholder="가계부 이름" required>
-        <button type="submit" class="btn-action">새 가계부 생성하기</button>
-    </form>
-
-    <div style="border-top: 1px solid var(--color-line); margin-bottom: 24px;"></div>
-
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">초대 코드로 참여하기</h3>
-    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">기존 사용자가 공유해준 초대 코드를 입력하여 다른 가계부에 참여하세요.</p>
-    <form method="POST" style="display: flex; flex-direction: column; gap: var(--spacing-md);">
-        <input type="hidden" name="action" value="join">
-        <input type="text" name="invite_code" class="input-field" placeholder="초대 코드 입력" required>
-        <button type="submit" class="btn-action" style="background-color: var(--color-secondary);">참여하기</button>
+        <div class="input-wrapper" style="margin-bottom: 16px;">
+            <input type="text" name="ledger_name" class="input-field" placeholder="가계부 이름 (예: 우리집 가계부)" required>
+        </div>
+        <button type="submit" class="btn-action" style="width: 100%;">생성하기</button>
     </form>
 </div>
+
+<div class="card">
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">초대 코드로 참여하기</h3>
+    <form action="/onboarding" method="POST">
+        <!-- SPA 통신 시 확실한 분기를 위한 hidden input -->
+        <input type="hidden" name="action" value="join">
+        <div class="input-wrapper" style="margin-bottom: 16px;">
+            <input type="text" name="invite_code" class="input-field" placeholder="전달받은 초대 코드" required>
+        </div>
+        <button type="submit" class="btn-action" style="width: 100%; background-color: var(--color-secondary);">참여하기</button>
+    </form>
+</div>
+
+{% if error %}
+<script>
+    alert('{{ error }}');
+</script>
+{% endif %}
+
 {% endblock %}

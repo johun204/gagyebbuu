@@ -2,7 +2,6 @@ import os
 import time
 import jwt
 
-# Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
 os.environ['TZ'] = 'Asia/Seoul'
 if hasattr(time, 'tzset'):
     time.tzset()
@@ -16,7 +15,6 @@ from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
-# JWT 암호화에 사용될 시크릿 키 (Vercel 환경변수에서 설정 권장)
 app.secret_key = os.environ.get('SECRET_KEY', 'gagye_bbu_fallback_secret_key_987654321')
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
@@ -38,91 +36,29 @@ BOOTSTRAP_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>가계쀼 - 공유 가계부</title>
-    
-    <meta property="og:title" content="가계쀼 - 공유 가계부">
-    <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
-    <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
-    <meta property="og:url" content="{{ request.host_url }}">
-    
-    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <title>가계쀼 로딩중...</title>
     <style>
-        :root {
-            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
-            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
-            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
-            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
-            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; padding: var(--spacing-base); padding-bottom: 130px; max-width: 768px; margin: 0 auto; }
-        
-        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
-        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
-        .month-selector h3 { font-size: 20px; font-weight: 700; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
-        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
-        
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); padding-top: 10px; box-sizing: content-box; }
-        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
-        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
-
-        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
-        .skeleton-text.short { width: 50%; }
+        body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#fff; font-family:sans-serif; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #13bd7e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <main>
-        <div class="month-selector"><a href="#" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" style="visibility:hidden;">▶</a></div>
-        <div class="card">
-            <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
-            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                <div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div>
-            </div>
-            <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
-                <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: 4px;"></div>
-                <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
-                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
-                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
-            </div>
-        </div>
-        <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
-    </main>
-
-    <div class="bottom-nav">
-        <a href="#" class="nav-link active"><span style="font-size:20px;">🏠</span>홈</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">📅</span>달력</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">📝</span>내역</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">⚙️</span>설정</a>
-    </div>
-
+    <div class="loader"></div>
     <script>
         const token = localStorage.getItem('jwt_token');
         const currentUrl = window.location.href;
-        
         if (window.location.pathname.startsWith('/invite/')) {
-            const hash = window.location.pathname.split('/').pop();
-            localStorage.setItem('pending_invite', hash);
+            localStorage.setItem('pending_invite', window.location.pathname.split('/').pop());
         }
-
         if (token) {
-            fetch(currentUrl, {
-                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
-            })
+            fetch(currentUrl, { headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' } })
             .then(res => {
-                if (res.status === 401) {
-                    localStorage.removeItem('jwt_token');
-                    window.location.href = '/login';
-                } else { return res.text(); }
+                if (res.status === 401) { localStorage.removeItem('jwt_token'); window.location.href = '/login'; }
+                else { return res.text(); }
             })
-            .then(html => {
-                if(html) {
-                    document.open(); document.write(html); document.close();
-                }
-            }).catch(() => { window.location.href = '/login'; });
+            .then(html => { if(html) { document.open(); document.write(html); document.close(); } })
+            .catch(() => { window.location.href = '/login'; });
         } else {
             window.location.href = '/login';
         }
@@ -148,6 +84,12 @@ TOKEN_SAVE_HTML = """
 </body>
 </html>
 """
+
+def spa_redirect(target_url):
+    """SPA 환경에서 토큰이 유실되는 302 리다이렉트 대신 JSON 응답으로 대체하는 헬퍼 함수"""
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('ajax') == '1':
+        return jsonify({'redirect': target_url})
+    return redirect(target_url)
 
 @app.route('/sw.js')
 def serve_sw():
@@ -179,9 +121,7 @@ def require_login():
             payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
             request.user_id = payload['user_id']
             return  
-        except jwt.ExpiredSignatureError:
-            pass
-        except jwt.InvalidTokenError:
+        except Exception:
             pass
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
@@ -262,13 +202,12 @@ def kakao_callback():
         db.session.commit()
         
     token = jwt.encode({'user_id': user.id, 'exp': datetime.utcnow() + timedelta(days=365)}, app.secret_key, algorithm='HS256')
-    
     return render_template_string(TOKEN_SAVE_HTML, token=token)
 
 @app.route('/onboarding', methods=['GET', 'POST'])
 def onboarding():
     user = User.query.get(request.user_id)
-    if user.ledger_id: return redirect(url_for('home'))
+    if user.ledger_id: return spa_redirect(url_for('home'))
     
     error_msg = None
     if request.method == 'POST':
@@ -286,7 +225,7 @@ def onboarding():
                 
             user.ledger_id = new_ledger.id
             db.session.commit()
-            return redirect(url_for('home'))
+            return spa_redirect(url_for('home'))
             
         elif action == 'join':
             invite_code = request.form.get('invite_code', '').strip()
@@ -294,7 +233,7 @@ def onboarding():
             if ledger and len(ledger.users) < 2:
                 user.ledger_id = ledger.id
                 db.session.commit()
-                return redirect(url_for('home'))
+                return spa_redirect(url_for('home'))
             else:
                 error_msg = "유효하지 않거나 이미 2명이 참여 중인 초대 코드입니다."
                 
@@ -333,7 +272,7 @@ def invite(hash):
 def leave_ledger():
     user = User.query.get(request.user_id)
     if not user or not user.ledger_id:
-        return redirect(url_for('onboarding'))
+        return spa_redirect(url_for('onboarding'))
 
     ledger = Ledger.query.get(user.ledger_id)
     if ledger:
@@ -347,7 +286,7 @@ def leave_ledger():
             user.ledger_id = None
         db.session.commit()
         
-    return redirect(url_for('onboarding'))
+    return spa_redirect(url_for('onboarding'))
 
 def build_home_data(user_id, y, m):
     user = User.query.get(user_id)
@@ -641,7 +580,7 @@ def update_nickname():
         if update_past:
             Transaction.query.filter_by(ledger_id=user.ledger_id, transactor=old_nickname).update({'transactor': new_nickname})
         db.session.commit()
-    return redirect(url_for('settings'))
+    return spa_redirect(url_for('settings'))
 
 @app.route('/update_ledger_name', methods=['POST'])
 def update_ledger_name():
@@ -651,7 +590,7 @@ def update_ledger_name():
     if new_name:
         ledger.name = new_name
         db.session.commit()
-    return redirect(url_for('settings'))
+    return spa_redirect(url_for('settings'))
 
 @app.route('/set_budget', methods=['POST'])
 def set_budget():
@@ -670,7 +609,7 @@ def set_budget():
                 cat.budget = int(val_str) if val_str.isdigit() else 0
     
     db.session.commit()
-    return redirect(url_for('settings'))
+    return spa_redirect(url_for('settings'))
 
 @app.route('/transaction', methods=['POST'])
 def add_transaction():
@@ -720,7 +659,7 @@ def add_transaction():
     if request.form.get('ajax') == '1':
         return jsonify({'success': True})
         
-    return redirect(url_for('transactions'))
+    return spa_redirect(url_for('transactions'))
 
 @app.route('/transaction/<int:tx_id>/edit', methods=['GET', 'POST'])
 def edit_transaction(tx_id):
@@ -751,7 +690,7 @@ def edit_transaction(tx_id):
             return jsonify({'success': True})
             
         next_url = request.form.get('next') or url_for('transactions')
-        return redirect(next_url)
+        return spa_redirect(next_url)
         
     categories = Category.query.filter_by(ledger_id=user.ledger_id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     next_url = request.args.get('next', '')
@@ -768,7 +707,7 @@ def delete_transaction(tx_id):
     if request.form.get('ajax') == '1' or request.headers.get('Accept') == 'application/json':
         return jsonify({'success': True})
         
-    return redirect(request.referrer or url_for('transactions'))
+    return spa_redirect(request.referrer or url_for('transactions'))
 
 @app.route('/search')
 def search():
@@ -832,8 +771,6 @@ def export_csv():
                          tx.tx_type, tx.transactor, tx.category.name, tx.title, tx.memo, tx.amount, int(tx.exclude_analysis), tx.user.nickname])
                          
     csv_data = output.getvalue().encode('utf-8-sig')
-    
-    # 다운로드 명시를 위한 헤더
     response = Response(csv_data, mimetype="application/octet-stream")
     response.headers["Content-Disposition"] = 'attachment; filename="ledger.csv"'
     return response
@@ -898,9 +835,7 @@ def import_csv():
                 db.session.add(new_tx)
                 
         db.session.commit()
-    return redirect(url_for('csv_manage'))
+    return spa_redirect(url_for('csv_manage'))
 
 if __name__ == '__main__':
-    if os.environ.get('SECRET_KEY') is None:
-        print("[WARNING] SECRET_KEY is not set in Vercel Environment Variables.")
     app.run(host='0.0.0.0', debug=False)
