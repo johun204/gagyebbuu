@@ -1,22 +1,30 @@
 {% extends "base.html" %}
 {% block content %}
 <div style="margin-bottom: var(--spacing-lg);">
-    <a href="/settings" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 설정으로 돌아가기</a>
+    <a href="/settings" class="no-spa" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 설정으로 돌아가기</a>
 </div>
+
+<h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">데이터 관리</h2>
+
 <div class="card">
-    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">CSV 데이터 내보내기</h2>
-    <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 16px;">현재까지 기록된 모든 가계부 내역을 엑셀에서 열어볼 수 있는 CSV 파일로 다운로드합니다.</p>
-    <a href="/export" class="btn-action" style="width: 100%; text-align: center; text-decoration: none;">내보내기 실행</a>
-</div>
-<div class="card">
-    <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">CSV 데이터 불러오기</h2>
-    <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 16px;">
-        기존에 백업한 CSV 파일을 업로드하여 데이터를 복원하거나 대량으로 내역을 추가합니다. <br>
-        <span style="color: #fe493d;">(※ 파일 형식은 '일자, 시간, 구분, 거래자, 분류, 제목, 메모, 금액, 작성자' 열을 포함해야 합니다.)</span>
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">데이터 내보내기</h3>
+    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 16px;">
+        현재 가계부의 모든 내역, 카테고리, 예산 설정을 CSV 파일로 다운로드합니다.
     </p>
-    <form action="/import" method="POST" enctype="multipart/form-data" style="display: flex; flex-direction: column; gap: 12px;">
-        <input type="file" name="csv_file" accept=".csv" required class="input-field" style="padding: 8px;">
-        <button type="submit" class="btn-action" style="width: 100%;">불러오기 실행</button>
+    <!-- [중요] no-spa 클래스와 download 속성을 추가하여 브라우저의 기본 파일 다운로드 기능이 작동하게 합니다. -->
+    <a href="/export" class="btn-action no-spa" download style="width: 100%; text-decoration: none; text-align: center;">CSV 내보내기</a>
+</div>
+
+<div class="card">
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">데이터 불러오기</h3>
+    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 16px;">
+        내보낸 CSV 파일을 업로드하여 데이터를 복원합니다. <br>
+        <span style="color: #fe493d;">주의: 기존 데이터와 중복될 수 있으므로 빈 가계부에서 사용하는 것을 권장합니다.</span>
+    </p>
+    <!-- 파일 업로드 폼도 SPA 라우터를 거치지 않도록 no-spa 적용 -->
+    <form action="/import" method="POST" enctype="multipart/form-data" class="no-spa" onsubmit="return confirm('CSV 데이터를 불러오시겠습니까?');">
+        <input type="file" name="csv_file" accept=".csv" class="input-field" style="margin-bottom: 16px;" required>
+        <button type="submit" class="btn-action" style="width: 100%;">CSV 불러오기</button>
     </form>
 </div>
 {% endblock %}

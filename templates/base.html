@@ -16,7 +16,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
-        // [중요] JWT 전역 Fetch 인터셉터
         const originalFetch = window.fetch;
         window.fetch = async function() {
             let [resource, config] = arguments;
@@ -102,7 +101,8 @@
     <div id="nprogress"></div>
     <main id="app-content">{% block content %}{% endblock %}</main>
 
-    {% if current_user_id %}
+    <!-- 가계부를 보유한(has_ledger가 True) 사용자에게만 네비게이션 표시 -->
+    {% if current_user_id and has_ledger %}
     <div class="bottom-nav">
         <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}"><span style="font-size:20px;">🏠</span>홈</a>
         <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}"><span style="font-size:20px;">📅</span>달력</a>
@@ -222,6 +222,11 @@
             <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">예산 설정</h3><div class="skeleton" style="height:150px; border-radius:16px;"></div></div>
         `;
 
+        const skeletonOnboarding = `
+            <div class="card"><div class="skeleton skeleton-text short" style="height:24px;"></div><div class="skeleton" style="height:100px; border-radius:8px;"></div></div>
+            <div class="card"><div class="skeleton skeleton-text short" style="height:24px;"></div><div class="skeleton" style="height:100px; border-radius:8px;"></div></div>
+        `;
+
         function getSkeletonHtml(urlStr) {
             let path = '';
             try { path = new URL(urlStr, window.location.origin).pathname; } catch(e) { path = urlStr; }
@@ -229,6 +234,7 @@
             if (path.includes('transactions')) return skeletonTransactions;
             if (path.includes('search')) return skeletonSearch;
             if (path.includes('settings') || path.includes('csv_manage')) return skeletonSettings;
+            if (path.includes('onboarding') || path.includes('login')) return skeletonOnboarding;
             return skeletonHome;
         }
 
@@ -288,7 +294,14 @@
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
             
+            const submitter = e.submitter;
             const formData = new FormData(form);
+            
+            // 핵심 조치: 폼이 submit 버튼을 통해 전송될 때 누락된 name과 value를 명시적으로 삽입합니다.
+            if (submitter && submitter.name) {
+                formData.append(submitter.name, submitter.value);
+            }
+            
             const url = form.method.toUpperCase() === 'GET' ? form.action + '?' + new URLSearchParams(formData).toString() : form.action;
             
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);

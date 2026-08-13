@@ -1,6 +1,6 @@
 import os
 import time
-import jwt # requirements.txt 에 PyJWT 추가 필수
+import jwt
 
 # Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
 os.environ['TZ'] = 'Asia/Seoul'
@@ -32,22 +32,73 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
-# [JWT 브라우저 초기 진입용 부트스트래퍼]
 BOOTSTRAP_HTML = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>가계쀼 로딩중...</title>
+    <title>가계쀼 - 공유 가계부</title>
+    
+    <meta property="og:title" content="가계쀼 - 공유 가계부">
+    <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
+    <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
+    <meta property="og:url" content="{{ request.host_url }}">
+    
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style>
-        body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#fff; font-family:sans-serif; }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #13bd7e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        :root {
+            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
+            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
+            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; padding: var(--spacing-base); padding-bottom: 130px; max-width: 768px; margin: 0 auto; }
+        
+        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
+        .month-selector h3 { font-size: 20px; font-weight: 700; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
+        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
+        
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); padding-top: 10px; box-sizing: content-box; }
+        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
+        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
+
+        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
+        .skeleton-text.short { width: 50%; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
+    <main>
+        <div class="month-selector"><a href="#" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" style="visibility:hidden;">▶</a></div>
+        <div class="card">
+            <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div>
+            </div>
+            <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
+                <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: 4px;"></div>
+                <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
+                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
+                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+            </div>
+        </div>
+        <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
+    </main>
+
+    <div class="bottom-nav">
+        <a href="#" class="nav-link active"><span style="font-size:20px;">🏠</span>홈</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">📅</span>달력</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">📝</span>내역</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">⚙️</span>설정</a>
+    </div>
+
     <script>
         const token = localStorage.getItem('jwt_token');
         const currentUrl = window.location.href;
@@ -80,7 +131,6 @@ BOOTSTRAP_HTML = """
 </html>
 """
 
-# [카카오 로그인 직후 토큰 저장기]
 TOKEN_SAVE_HTML = """
 <!DOCTYPE html>
 <html>
@@ -105,7 +155,17 @@ def serve_sw():
 
 @app.context_processor
 def inject_user():
-    return dict(current_user_id=getattr(request, 'user_id', None))
+    # 사용자가 가계부에 가입되어 있는지 여부를 하단 메뉴바 표시 등에 활용합니다.
+    user_id = getattr(request, 'user_id', None)
+    has_ledger = False
+    if user_id:
+        try:
+            user = User.query.get(user_id)
+            if user and user.ledger_id:
+                has_ledger = True
+        except:
+            pass
+    return dict(current_user_id=user_id, has_ledger=has_ledger)
 
 @app.before_request
 def require_login():
@@ -113,24 +173,21 @@ def require_login():
     if request.endpoint in public_endpoints:
         return
 
-    # JWT 검증 로직
     auth_header = request.headers.get('Authorization')
     if auth_header and auth_header.startswith('Bearer '):
         token = auth_header.split(' ')[1]
         try:
             payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
             request.user_id = payload['user_id']
-            return  # 인증 통과
+            return  
         except jwt.ExpiredSignatureError:
             pass
         except jwt.InvalidTokenError:
             pass
 
-    # AJAX 요청인데 토큰이 없거나 유효하지 않으면 401 반환
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # 브라우저 직접 접근 시 (새로고침 등) 부트스트래퍼 반환하여 JS로 토큰 담아 재요청 유도
     return render_template_string(BOOTSTRAP_HTML)
 
 @app.errorhandler(500)
@@ -176,7 +233,6 @@ def login():
 
 @app.route('/logout')
 def logout():
-    # 로그아웃 시 로컬 스토리지의 토큰 파기
     return "<script>localStorage.removeItem('jwt_token'); window.location.href='/login';</script>"
 
 @app.route('/oauth/kakao/callback')
@@ -206,7 +262,6 @@ def kakao_callback():
         db.session.add(user)
         db.session.commit()
         
-    # JWT 토큰 생성 (유효기간 1년)
     token = jwt.encode({'user_id': user.id, 'exp': datetime.utcnow() + timedelta(days=365)}, app.secret_key, algorithm='HS256')
     
     return render_template_string(TOKEN_SAVE_HTML, token=token)
@@ -379,6 +434,7 @@ def api_home_data():
 @app.route('/calendar')
 def calendar():
     user = User.query.get(request.user_id)
+    if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
     
@@ -467,6 +523,7 @@ def api_calendar_data():
 @app.route('/transactions')
 def transactions():
     user = User.query.get(request.user_id)
+    if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     
@@ -568,6 +625,7 @@ def api_move_category(cat_id):
 @app.route('/settings')
 def settings():
     user = User.query.get(request.user_id)
+    if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     return render_template('settings.html', ledger=ledger, current_user=user, categories=categories, current_tab='settings')
@@ -716,6 +774,7 @@ def delete_transaction(tx_id):
 @app.route('/search')
 def search():
     user = User.query.get(request.user_id)
+    if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     
     start_date = request.args.get('start_date')
