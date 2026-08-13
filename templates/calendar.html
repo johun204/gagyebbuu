@@ -41,7 +41,7 @@
 </div>
 
 <div class="card" style="padding: 16px; margin-top: 16px; margin-bottom: 24px;">
-    <!-- 4번 요구사항: 0000-00-00 (요일) 형태로만 표시 (하단 JS selectDate 에서 주입) -->
+    <!-- 오직 날짜만 표출되도록 소제목 간소화 -->
     <h3 id="daily-list-title" style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--color-foreground);"></h3>
     <div id="daily-tx-list"></div>
 </div>
@@ -79,22 +79,28 @@
         </div>
         
         <div class="flex-row">
-            <div class="input-wrapper">
-                <select name="category_id" id="cal_category_select" class="input-field">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <select name="category_id" id="cal_category_select" class="input-field" style="flex: 1;">
                     <option value="{{ uncat.id if uncat else '' }}">미분류</option>
                     {% for cat in categories if cat.name != '미분류' %}
                         <option value="{{ cat.id }}">{{ cat.name }}</option>
                     {% endfor %}
                 </select>
+                <!-- 내역 탭과 동일한 분류 편집 버튼 추가 -->
+                <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
-            <div class="input-wrapper" style="flex: 0 0 140px;">
-                <input type="date" name="date" id="cal_date_input" class="input-field" required>
+        </div>
+        
+        <div class="flex-row">
+            <div class="input-wrapper" style="display: flex; gap: 8px;">
+                <input type="date" name="date" id="cal_date_input" class="input-field" required style="flex: 1;">
+                <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
+                <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
             </div>
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
             <div class="input-wrapper"><input type="text" id="cal_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택)"></div>
-            <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
         </div>
 
         <div class="flex-row" style="margin-bottom: 16px;">
@@ -107,6 +113,7 @@
     </form>
 </div>
 
+<!-- 시간 설정 팝업 -->
 <dialog id="cal-time-dialog">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
         <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
@@ -116,6 +123,19 @@
         <div class="input-wrapper"><input type="time" id="cal_time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
     </div>
     <button type="button" class="btn-action" style="width:100%;" onclick="window.setCalTime()">확인</button>
+</dialog>
+
+<!-- 카테고리 편집 팝업 -->
+<dialog id="cat-dialog">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-size: 18px; font-weight: 700;">분류 관리</h3>
+        <button type="button" class="chip" onclick="document.getElementById('cat-dialog').close()" style="background:none;">닫기</button>
+    </div>
+    <div class="flex-row">
+        <div class="input-wrapper"><input type="text" id="new_cat_name" class="input-field" placeholder="새 분류 이름"></div>
+        <button type="button" class="btn-action" onclick="window.addCat()">추가</button>
+    </div>
+    <div id="cat-list" style="max-height: 300px; overflow-y: auto;"></div>
 </dialog>
 
 <script>
@@ -211,7 +231,7 @@
             let cell = document.getElementById('cal-cell-' + dateStr);
             if(cell) cell.style.backgroundColor = 'rgba(6, 169, 108, 0.1)';
             
-            // 날짜만 깔끔하게 표시
+            // 날짜만 간결하게 표시
             document.getElementById('daily-list-title').innerText = window.getDowStr(dateStr);
             
             let data = window.allMonthsData[`${window.currentY}-${window.currentM}`];
@@ -365,6 +385,43 @@
                 document.getElementById('cal_amount_input').placeholder = '수입 금액(원)';
             }
         };
+        
+        // 분류 모달 조작 함수 통합
+        window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
+        window.loadCategories = async function() {
+            const res = await fetch('/api/categories');
+            const cats = await res.json();
+            const editableCats = cats.filter(c => c.name !== '미분류');
+            const uncat = cats.find(c => c.name === '미분류');
+            
+            const list = document.getElementById('cat-list');
+            list.innerHTML = editableCats.map(c => `
+                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-line); align-items: center;">
+                    <div style="flex:1;">
+                        <input type="text" id="cat-name-${c.id}" value="${c.name}" class="input-field" style="display:none; padding:4px 8px; width:120px;">
+                        <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${c.name}</span>
+                    </div>
+                    <div style="display:flex; gap: 4px; align-items:center;">
+                        <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
+                        <button type="button" onclick="window.moveCat(${c.id}, 'down')" style="background:none;border:none;font-size:14px;cursor:pointer;">▼</button>
+                        <button type="button" id="cat-edit-btn-${c.id}" class="chip" onclick="window.enableEdit(${c.id})" style="padding:4px 8px;font-size:12px;">수정</button>
+                        <button type="button" id="cat-save-btn-${c.id}" class="chip" onclick="window.saveCat(${c.id})" style="display:none; background:var(--color-action); color:#fff; padding:4px 8px;font-size:12px;">저장</button>
+                        <button type="button" onclick="window.deleteCat(${c.id})" style="background:none;border:none;color:#fe493d;font-size:12px;padding:4px;cursor:pointer;">삭제</button>
+                    </div>
+                </div>
+            `).join('');
+
+            const select = document.getElementById('cal_category_select');
+            const val = select.value;
+            
+            let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            select.innerHTML = selectHtml; select.value = val;
+        };
+        window.addCat = async function() { const name = document.getElementById('new_cat_name').value; if (!name) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); document.getElementById('new_cat_name').value = ''; window.loadCategories(); };
+        window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
+        window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
+        window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
+        window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
         window.openAddSheet = function() {
             document.getElementById('sheet-title').innerText = '새 내역 등록';
@@ -420,7 +477,7 @@
                     document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
                     window.selectDate(window.selectedDate);
                 }
-            } catch(e) { alert('오류가 발생했습니다.'); }
+            } catch(e) { /* 에러 모달이 공통으로 처리해줌 */ }
         });
 
         window.deleteTx = async function(id) {

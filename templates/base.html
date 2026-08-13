@@ -49,7 +49,6 @@
                             delay *= 2; 
                             continue;
                         } else {
-                            // 500 에러 최종 실패 시 모달 표시
                             const errorDialog = document.getElementById('db-error-dialog');
                             if (errorDialog && !errorDialog.open) {
                                 errorDialog.showModal();
@@ -66,7 +65,6 @@
                         delay *= 2;
                         continue;
                     } else {
-                        // 네트워크 오류 시 모달 표시
                         const errorDialog = document.getElementById('db-error-dialog');
                         if (errorDialog && !errorDialog.open) {
                             errorDialog.showModal();
@@ -152,7 +150,6 @@
         {% endif %}
     </div>
 
-    <!-- 월 이동 공통 다이얼로그 -->
     <dialog id="global-month-picker">
         <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
             <h3 style="font-size: 18px; font-weight: 700;">월 이동</h3>
@@ -164,7 +161,6 @@
         <button type="button" class="btn-action" style="width:100%; margin-top: 12px;" onclick="window.jumpToMonth()">이동하기</button>
     </dialog>
 
-    <!-- DB 연결 지연 안내 모달 팝업 -->
     <dialog id="db-error-dialog">
         <div style="text-align: center; padding: 10px 0;">
             <div style="font-size: 40px; margin-bottom: 16px;">⏳</div>
@@ -223,8 +219,6 @@
                     <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
                     <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
                     <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
-                    <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
                 </div>
             </div>
             <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
@@ -247,8 +241,6 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"><h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3><div class="skeleton" style="width: 80px; height: 28px; border-radius: 6px;"></div></div>
                 <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
                 <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
-                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 0 0 120px; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
-                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 0 0 80px; height: 44px; border-radius: 6px;"></div></div>
                 <div class="skeleton" style="width: 100%; height: 44px; border-radius: 16px; margin-top: 16px;"></div>
             </div>
             <div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div>
@@ -260,9 +252,6 @@
                 <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
                 <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
                 <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
-                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
-                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
-                <div style="display: flex; gap: 8px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
             </div>
             <div class="card" style="background: transparent; border: none; padding: 0;"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3><div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div></div>
         `;
@@ -271,8 +260,6 @@
             <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">설정</h2>
             <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
             <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">참여 중인 사용자</h3><div class="skeleton" style="height:48px; border-radius:16px; margin-bottom:8px;"></div><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
-            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 이름 변경</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
-            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 초대</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
             <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">예산 설정</h3><div class="skeleton" style="height:150px; border-radius:16px;"></div></div>
         `;
 
@@ -293,15 +280,57 @@
             return skeletonHome;
         }
 
+        // DOM 적용 헬퍼: 캐시 렌더링 및 최종 네트워크 업데이트 시 사용 (중복코드 최소화)
+        function applyDOM(html, url, push) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            
+            document.title = doc.title;
+            if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
+            if(window.txObserver) window.txObserver.disconnect();
+            
+            document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
+            
+            const docNav = doc.getElementById('nav-container');
+            if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
+
+            if(push) window.history.pushState({path: url}, '', url);
+            
+            document.querySelectorAll('.bottom-nav a').forEach(a => {
+                a.classList.remove('active');
+                if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
+            });
+
+            const scripts = document.getElementById('app-content').querySelectorAll('script');
+            scripts.forEach(s => {
+                const newScript = document.createElement('script');
+                Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                newScript.appendChild(document.createTextNode(s.innerHTML));
+                s.parentNode.replaceChild(newScript, s);
+            });
+        }
+
         async function navigate(url, pushState = true) {
             const bar = document.getElementById('nprogress');
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
             
+            let isNetworkDone = false;
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
+            
+            // [강화된 기능] Stale-while-revalidate (오프라인 캐시 선표출)
+            if ('caches' in window) {
+                caches.match(url).then(async (res) => {
+                    if (res && !isNetworkDone) {
+                        const html = await res.text();
+                        if (!isNetworkDone) applyDOM(html, url, false);
+                    }
+                });
+            }
             
             try {
                 const response = await fetch(url);
+                isNetworkDone = true;
                 
                 if (response.url && response.url.includes('/login') && !window.location.pathname.includes('/login')) {
                     localStorage.removeItem('jwt_token');
@@ -310,34 +339,14 @@
                 }
 
                 const html = await response.text();
-                const parser = new DOMParser();
-                const doc = parser.parseFromString(html, 'text/html');
+                applyDOM(html, url, pushState);
                 
-                document.title = doc.title;
-                if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
-                if(window.txObserver) window.txObserver.disconnect();
-                
-                document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
-                
-                const docNav = doc.getElementById('nav-container');
-                if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
-
-                if(pushState) window.history.pushState({path: url}, '', url);
-                
-                document.querySelectorAll('.bottom-nav a').forEach(a => {
-                    a.classList.remove('active');
-                    if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
-                });
-
-                const scripts = document.getElementById('app-content').querySelectorAll('script');
-                scripts.forEach(s => {
-                    const newScript = document.createElement('script');
-                    Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                    newScript.appendChild(document.createTextNode(s.innerHTML));
-                    s.parentNode.replaceChild(newScript, s);
-                });
+                if ('caches' in window) {
+                    caches.open('gagye-bbu-cache-v3').then(cache => {
+                        cache.put(url, new Response(html, {headers: {'Content-Type': 'text/html'}}));
+                    });
+                }
             } catch (err) { 
-                // [방어코드] 모달이 뜬 상태에서 네이티브 리다이렉트를 강제로 방지합니다.
                 if (err === 'Server Error') {
                     if (bar) bar.style.transform = 'scaleX(0)';
                     return;
@@ -391,35 +400,9 @@
                     }
                 } else {
                     const html = await response.text();
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    
-                    document.title = doc.title;
-                    if(window.appCharts) Object.values(window.appCharts).forEach(c => c && c.destroy());
-                    if(window.txObserver) window.txObserver.disconnect();
-                    
-                    document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
-                    
-                    const docNav = doc.getElementById('nav-container');
-                    if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
-
-                    window.history.pushState({path: response.url}, '', response.url);
-                    
-                    document.querySelectorAll('.bottom-nav a').forEach(a => {
-                        a.classList.remove('active');
-                        if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
-                    });
-
-                    const scripts = document.getElementById('app-content').querySelectorAll('script');
-                    scripts.forEach(s => {
-                        const newScript = document.createElement('script');
-                        Array.from(s.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
-                        newScript.appendChild(document.createTextNode(s.innerHTML));
-                        s.parentNode.replaceChild(newScript, s);
-                    });
+                    applyDOM(html, response.url, true);
                 }
             } catch (err) { 
-                // [방어코드] 모달이 유지되도록 처리 중단
                 if (err === 'Server Error') {
                     if (bar) bar.style.transform = 'scaleX(0)';
                     return;

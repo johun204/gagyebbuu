@@ -32,7 +32,6 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
-# [초기 진입 화면 개선] 에러 JSON 출력 버그 방지 및 모달, 재시도 로직 통합
 BOOTSTRAP_HTML = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -88,14 +87,14 @@ BOOTSTRAP_HTML = """
         if (token) {
             const fetchWithRetry = async (url, options, maxRetries = 3) => {
                 let attempt = 0;
-                let delay = 500; // 0.5초 시작
+                let delay = 500; 
                 while (attempt <= maxRetries) {
                     try {
                         const res = await fetch(url, options);
                         if (res.status >= 500 && attempt < maxRetries) {
                             attempt++;
                             await new Promise(r => setTimeout(r, delay));
-                            delay *= 2; // 0.5 -> 1 -> 2 -> 4초
+                            delay *= 2; 
                             continue;
                         }
                         return res;
@@ -381,7 +380,8 @@ def build_home_data(user_id, y, m):
     user = User.query.get(user_id)
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    all_tx = Transaction.query.filter_by(ledger_id=ledger.id).all()
+    # 최신 등록순으로 명시적 정렬 추가
+    all_tx = Transaction.query.filter_by(ledger_id=ledger.id).order_by(Transaction.datetime_val.desc(), Transaction.id.desc()).all()
     txs = [tx for tx in all_tx if tx.datetime_val.year == y and tx.datetime_val.month == m and not tx.exclude_analysis]
     
     monthly_income = sum(tx.amount for tx in txs if tx.tx_type == '수입')
@@ -468,7 +468,8 @@ def calendar():
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
     
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    all_tx = Transaction.query.filter_by(ledger_id=ledger.id).order_by(Transaction.datetime_val.desc()).all()
+    # [수정] 캘린더 화면 첫 로딩 시 리스트 순서를 최신등록, 최신시간 역순으로 고정
+    all_tx = Transaction.query.filter_by(ledger_id=ledger.id).order_by(Transaction.datetime_val.desc(), Transaction.id.desc()).all()
     txs = [tx for tx in all_tx if tx.datetime_val.year == t_year and tx.datetime_val.month == t_month]
     
     daily_totals = {}
@@ -516,7 +517,8 @@ def api_calendar_data():
     y = int(request.args.get('year'))
     m = int(request.args.get('month'))
     
-    all_tx = Transaction.query.filter_by(ledger_id=user.ledger_id).all()
+    # [수정] 캘린더 API 로딩 시에도 리스트 순서를 강력하게 고정
+    all_tx = Transaction.query.filter_by(ledger_id=user.ledger_id).order_by(Transaction.datetime_val.desc(), Transaction.id.desc()).all()
     txs = [tx for tx in all_tx if tx.datetime_val.year == y and tx.datetime_val.month == m]
     
     daily_totals = {}
@@ -580,7 +582,7 @@ def api_transactions():
         t_year, t_month, _, _, _, _ = get_target_date()
     
     query = Transaction.query.filter_by(ledger_id=user.ledger_id)
-    all_tx = query.order_by(Transaction.datetime_val.desc()).all()
+    all_tx = query.order_by(Transaction.datetime_val.desc(), Transaction.id.desc()).all()
     month_txs = [tx for tx in all_tx if tx.datetime_val.year == t_year and tx.datetime_val.month == t_month]
     
     start_idx = (page - 1) * per_page
@@ -807,6 +809,7 @@ def delete_transaction(tx_id):
 @app.route('/search')
 def search():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     
