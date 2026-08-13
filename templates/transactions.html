@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    /* 입력 폼 관련 스타일 (iPhone 터짐 방지 반영) */
     input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
     .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
 
@@ -14,13 +13,11 @@
     #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     #toast-popup.show { opacity: 1; }
 
-    /* 바텀시트 CSS */
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
     #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     #edit-bottom-sheet.active { transform: translateY(0); }
 
-    /* 내역 탭의 리스트 스와이프 컨테이너용 CSS */
     #tx-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
     #tx-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
     .tx-slide { width: 33.333%; flex-shrink: 0; box-sizing: border-box; }
@@ -30,14 +27,12 @@
 
 <div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
 
-<!-- 월 선택기: 전역 팝업 연결 & 스와이프 기능 함수 연동 -->
 <div class="month-selector">
     <a href="javascript:void(0)" onclick="window.shiftTxMonth(-1)" class="no-spa">◀</a> 
     <h3 id="tx-month-header" onclick="window.openMonthPicker(window.currentTxY || {{ t_year }}, window.currentTxM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월 내역</h3>
     <a href="javascript:void(0)" onclick="window.shiftTxMonth(1)" class="no-spa">▶</a>
 </div>
 
-<!-- 새 내역 등록 폼 (이 영역은 스와이프에 딸려가지 않고 상단에 고정) -->
 <div class="card" style="margin-bottom: 8px;">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3>
@@ -99,7 +94,6 @@
     </form>
 </div>
 
-<!-- 내역 리스트 스와이프 영역 (입력 폼 하단) -->
 <div id="tx-slider-wrapper">
     <div id="tx-slider">
         <div id="slide-tx-prev" class="tx-slide"></div>
@@ -108,7 +102,6 @@
     </div>
 </div>
 
-<!-- 수정용 통합 바텀시트 -->
 <div id="edit-sheet-overlay" onclick="window.closeEditSheet()"></div>
 <div id="edit-bottom-sheet">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -208,13 +201,15 @@
 
 <script>
     {
-        window.txDataStore = {};
-        window.allTxPagesData = {}; // 페이징 데이터를 관리
+        // [개선] SWR 이중 로딩 방지를 위한 글로벌 인메모리 캐시 도입
+        window.txDataStore = window.txDataStore || {};
+        window.allTxPagesData = window.allTxPagesData || {};
+        window.txSliderCache = window.txSliderCache || {};
+        window.lastTxTabUid = window.lastTxTabUid || "";
 
         window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
         window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
 
-        // 무한 스와이프를 위한 개별 리스트 HTML 렌더링 (재사용 가능 형태)
         window.renderTxSlide = function(uid, isMain = false) {
             return `
                 <div id="tx-container-${uid}"></div>
@@ -225,18 +220,26 @@
             `;
         };
 
-        // 초기 컨테이너 설정
         const currUid = `${window.currentTxY}_${window.currentTxM}`;
         const pDate = window.getPrevMonth(window.currentTxY, window.currentTxM);
         const nDate = window.getNextMonth(window.currentTxY, window.currentTxM);
         const prevUid = `${pDate.y}_${pDate.m}`;
         const nextUid = `${nDate.y}_${nDate.m}`;
 
-        document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(currUid, true);
-        document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(prevUid);
-        document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nextUid);
+        // [핵심] SWR 업데이트 시 초기화 방지 로직 (메모리에서 즉시 복원)
+        if (window.txSliderCache[currUid] && window.lastTxTabUid === currUid) {
+            document.getElementById('tx-slider').innerHTML = window.txSliderCache[currUid];
+            setTimeout(() => { if(window.refreshTxObservers) window.refreshTxObservers(); }, 100);
+        } else {
+            window.lastTxTabUid = currUid;
+            document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(currUid, true);
+            document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(prevUid);
+            document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nextUid);
+            window.loadMoreTxs(currUid);
+            window.loadMoreTxs(prevUid);
+            window.loadMoreTxs(nextUid);
+        }
 
-        // 특정 월의 내역 로딩 함수
         window.loadMoreTxs = async function(uid, overridePage) {
             let [y, m] = uid.split('_');
             if (!window.allTxPagesData[uid]) {
@@ -258,7 +261,7 @@
                 const data = await res.json();
                 
                 const container = document.getElementById(`tx-container-${uid}`);
-                if (!container) return; // 돔이 해제되었으면 중단
+                if (!container) return; 
                 
                 if (s.page === 1) container.innerHTML = '';
                 
@@ -304,15 +307,15 @@
                         container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--color-muted);">해당 월의 내역이 없습니다.</div>`;
                     }
                 }
+                
+                // [핵심] 리스트가 업데이트될 때마다 전체 슬라이더의 HTML을 메모리에 복사해둠
+                const sliderDom = document.getElementById('tx-slider');
+                if (sliderDom && window.lastTxTabUid) {
+                    window.txSliderCache[window.lastTxTabUid] = sliderDom.innerHTML;
+                }
             } catch(e) { s.isLoading = false; }
         };
 
-        // 초기 데이터 로딩
-        window.loadMoreTxs(currUid);
-        window.loadMoreTxs(prevUid);
-        window.loadMoreTxs(nextUid);
-
-        // 옵저버(무한 스크롤 다운) 세팅
         if(window.txObserver) window.txObserver.disconnect();
         window.txObserver = new IntersectionObserver((entries) => { 
             entries.forEach(e => {
@@ -323,16 +326,13 @@
             });
         }, { rootMargin: '200px' });
         
-        // 현재 로딩된 옵저버 대상 갱신 헬퍼
         window.refreshTxObservers = function() {
             window.txObserver.disconnect();
-            const currUidStr = `${window.currentTxY}_${window.currentTxM}`;
-            const target = document.getElementById(`load-more-${currUidStr}`);
+            const target = document.getElementById(`load-more-${window.lastTxTabUid}`);
             if(target) window.txObserver.observe(target);
         };
         setTimeout(window.refreshTxObservers, 500);
 
-        // 내역 리스트 무한 스와이프
         window.shiftTxMonth = async function(dir) {
             let slider = document.getElementById('tx-slider');
             slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
@@ -358,21 +358,27 @@
                 let pId = `${pDate.y}_${pDate.m}`;
                 let nId = `${nDate.y}_${nDate.m}`;
 
-                document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId);
-                document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
-                document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
+                window.lastTxTabUid = cId;
                 
-                // 데이터가 이미 렌더링된 캐시가 없으면(스켈레톤) 즉시 첫 페이지 로드
-                window.allTxPagesData[cId] = null; window.loadMoreTxs(cId);
-                if(!window.allTxPagesData[pId]) window.loadMoreTxs(pId);
-                if(!window.allTxPagesData[nId]) window.loadMoreTxs(nId);
+                // 캐시가 존재하면 즉시 표출, 없으면 새로 그리기
+                if (window.txSliderCache[cId]) {
+                    slider.innerHTML = window.txSliderCache[cId];
+                    window.refreshTxObservers();
+                } else {
+                    document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId, true);
+                    document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
+                    document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
+                    
+                    window.allTxPagesData[cId] = null; window.loadMoreTxs(cId);
+                    if(!window.allTxPagesData[pId]) window.loadMoreTxs(pId);
+                    if(!window.allTxPagesData[nId]) window.loadMoreTxs(nId);
+                    window.refreshTxObservers();
+                }
                 
-                window.refreshTxObservers();
                 window.history.replaceState(null, '', `/transactions?year=${window.currentTxY}&month=${window.currentTxM}`);
             }, 300);
         };
 
-        // 내역 리스트 터치 제스처 연동 (수직 스크롤 간섭 방지 처리)
         const view = document.getElementById('tx-slider-wrapper');
         let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
         
@@ -392,7 +398,6 @@
             diffX = currentX - startX;
             let diffY = currentY - startY;
             
-            // 수직 스크롤 간섭 방지
             if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
                 isScrolling = true;
             }
@@ -485,6 +490,16 @@
         window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
         window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
+        // 리스트 파괴(새 데이터 요청) 유틸 함수
+        window.resetAndFetchCurrentList = function() {
+            window.txSliderCache = {}; // 덮어씌워질 것이므로 캐시 무효화
+            window.allTxPagesData = {}; 
+            let cUid = `${window.currentTxY}_${window.currentTxM}`;
+            document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cUid, true);
+            window.loadMoreTxs(cUid);
+            setTimeout(window.refreshTxObservers, 100);
+        };
+
         // 새 내역 등록 폼 (AJAX 처리)
         document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -499,11 +514,9 @@
                     
                     const t = document.getElementById('toast-popup'); t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
                     
-                    let currUid = `${window.currentTxY}_${window.currentTxM}`;
-                    window.allTxPagesData[currUid] = null;
-                    window.loadMoreTxs(currUid);
+                    window.resetAndFetchCurrentList();
                 }
-            } catch(e) { alert('오류가 발생했습니다.'); }
+            } catch(e) { /* 에러 모달이 공통으로 처리해줌 */ }
         });
 
         // 수정 바텀시트 제어
@@ -545,9 +558,7 @@
                 window.closeEditSheet();
                 const t = document.getElementById('toast-popup'); t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000);
                 
-                let currUid = `${window.currentTxY}_${window.currentTxM}`;
-                window.allTxPagesData[currUid] = null;
-                window.loadMoreTxs(currUid);
+                window.resetAndFetchCurrentList();
             }
         });
 
@@ -557,9 +568,7 @@
             let fd = new FormData(); fd.append('ajax', '1');
             let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
             if(res.ok) {
-                let currUid = `${window.currentTxY}_${window.currentTxM}`;
-                window.allTxPagesData[currUid] = null;
-                window.loadMoreTxs(currUid);
+                window.resetAndFetchCurrentList();
             }
         };
     }
