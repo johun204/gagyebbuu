@@ -32,6 +32,7 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
+# [초기 진입 화면 개선] 에러 JSON 출력 버그 방지 및 모달, 재시도 로직 통합
 BOOTSTRAP_HTML = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -48,56 +49,32 @@ BOOTSTRAP_HTML = """
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style>
         :root {
-            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
-            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
-            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
-            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
-            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
+            --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-foreground: #111111; --color-secondary: #555c68; --color-line: #f0f2f5;
+            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; padding: var(--spacing-base); padding-bottom: 130px; max-width: 768px; margin: 0 auto; }
+        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--color-action); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
-        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
-        .month-selector h3 { font-size: 20px; font-weight: 700; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
-        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
-        
-        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); padding-top: 10px; box-sizing: content-box; }
-        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
-        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
-
-        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
-        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
-        .skeleton-text.short { width: 50%; }
+        dialog { border: 1px solid var(--color-line); border-radius: 24px; padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
+        dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
+        .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--color-action); color: var(--color-canvas); border-radius: 16px; padding: 12px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
-    <main>
-        <div class="month-selector"><a href="#" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" style="visibility:hidden;">▶</a></div>
-        <div class="card">
-            <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
-            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                <div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div>
-            </div>
-            <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
-                <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: 4px;"></div>
-                <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
-                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
-                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
-            </div>
-        </div>
-        <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
-    </main>
+    <div class="loader" id="loader"></div>
 
-    <div class="bottom-nav">
-        <a href="#" class="nav-link active"><span style="font-size:20px;">🏠</span>홈</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">📅</span>달력</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">📝</span>내역</a>
-        <a href="#" class="nav-link"><span style="font-size:20px;">⚙️</span>설정</a>
-    </div>
+    <dialog id="db-error-dialog">
+        <div style="text-align: center; padding: 10px 0;">
+            <div style="font-size: 40px; margin-bottom: 16px;">⏳</div>
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">DB 연결 지연</h3>
+            <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 24px; line-height: 1.5;">
+                현재 서버 접속이 원활하지 않습니다.<br>아래 버튼을 눌러 다시 시도해주세요.
+            </p>
+            <button type="button" class="btn-action" onclick="window.location.reload();">새로고침 시도하기</button>
+        </div>
+    </dialog>
 
     <script>
         const token = localStorage.getItem('jwt_token');
@@ -109,20 +86,53 @@ BOOTSTRAP_HTML = """
         }
 
         if (token) {
-            fetch(currentUrl, {
+            const fetchWithRetry = async (url, options, maxRetries = 3) => {
+                let attempt = 0;
+                let delay = 500; // 0.5초 시작
+                while (attempt <= maxRetries) {
+                    try {
+                        const res = await fetch(url, options);
+                        if (res.status >= 500 && attempt < maxRetries) {
+                            attempt++;
+                            await new Promise(r => setTimeout(r, delay));
+                            delay *= 2; // 0.5 -> 1 -> 2 -> 4초
+                            continue;
+                        }
+                        return res;
+                    } catch (e) {
+                        if (attempt < maxRetries) {
+                            attempt++;
+                            await new Promise(r => setTimeout(r, delay));
+                            delay *= 2;
+                            continue;
+                        }
+                        throw e;
+                    }
+                }
+            };
+
+            fetchWithRetry(currentUrl, {
                 headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
-            })
+            }, 3)
             .then(res => {
                 if (res.status === 401) {
                     localStorage.removeItem('jwt_token');
                     window.location.href = '/login';
-                } else { return res.text(); }
+                } else if (res.status >= 500) {
+                    document.getElementById('loader').style.display = 'none';
+                    document.getElementById('db-error-dialog').showModal();
+                } else { 
+                    return res.text(); 
+                }
             })
             .then(html => {
                 if(html) {
                     document.open(); document.write(html); document.close();
                 }
-            }).catch(() => { window.location.href = '/login'; });
+            }).catch(() => { 
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('db-error-dialog').showModal();
+            });
         } else {
             window.location.href = '/login';
         }
@@ -202,7 +212,6 @@ def require_login():
 
     return render_template_string(BOOTSTRAP_HTML, og_title=og_title, og_desc=og_desc)
 
-# [핵심 방어 코드] 500 에러 발생 시 로그인 화면으로 리다이렉트하는 동작 제거 (스켈레톤 프리징 버그 차단)
 @app.errorhandler(500)
 def internal_server_error(e):
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
@@ -798,7 +807,6 @@ def delete_transaction(tx_id):
 @app.route('/search')
 def search():
     user = User.query.get(request.user_id)
-    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     

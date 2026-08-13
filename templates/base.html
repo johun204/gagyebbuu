@@ -16,7 +16,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
     <script>
-        // [개선] 500 에러 발생 시 Exponential Backoff (0.5초, 1초, 2초, 4초) 재시도 및 UI 팝업 로직
         const originalFetch = window.fetch;
         window.fetch = async function(...args) {
             let [resource, config] = args;
@@ -29,30 +28,28 @@
             
             config.headers = headers;
             
-            const maxRetries = 4; // 0.5, 1, 2, 4초 총 4회 재시도
+            const maxRetries = 4;
             let attempt = 0;
-            let delay = 500; // 초기 대기 시간 0.5초 (500ms)
+            let delay = 500; 
 
             while (attempt <= maxRetries) {
                 try {
                     const response = await originalFetch(resource, config);
                     
-                    // 미인증(로그인 풀림) 감지 시 즉시 처리
                     if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
                         localStorage.removeItem('jwt_token');
                         window.location.href = '/login';
                         return Promise.reject('Unauthorized');
                     }
                     
-                    // 500번대 서버 에러 발생 시 재시도 로직
                     if (response.status >= 500) {
                         if (attempt < maxRetries) {
                             attempt++;
                             await new Promise(resolve => setTimeout(resolve, delay));
-                            delay *= 2; // 0.5초 -> 1초 -> 2초 -> 4초로 지수적 증가
+                            delay *= 2; 
                             continue;
                         } else {
-                            // 4회 모두 실패 시 alert 대신 예쁜 모달 팝업 표시
+                            // 500 에러 최종 실패 시 모달 표시
                             const errorDialog = document.getElementById('db-error-dialog');
                             if (errorDialog && !errorDialog.open) {
                                 errorDialog.showModal();
@@ -60,18 +57,16 @@
                             return Promise.reject('Server Error');
                         }
                     }
-                    
-                    // 정상 응답
                     return response;
                     
                 } catch (error) {
-                    // 네트워크 단절 등 예외 상황 시에도 재시도 처리
                     if (attempt < maxRetries) {
                         attempt++;
                         await new Promise(resolve => setTimeout(resolve, delay));
                         delay *= 2;
                         continue;
                     } else {
+                        // 네트워크 오류 시 모달 표시
                         const errorDialog = document.getElementById('db-error-dialog');
                         if (errorDialog && !errorDialog.open) {
                             errorDialog.showModal();
@@ -169,7 +164,7 @@
         <button type="button" class="btn-action" style="width:100%; margin-top: 12px;" onclick="window.jumpToMonth()">이동하기</button>
     </dialog>
 
-    <!-- DB 연결 지연 안내 다이얼로그 -->
+    <!-- DB 연결 지연 안내 모달 팝업 -->
     <dialog id="db-error-dialog">
         <div style="text-align: center; padding: 10px 0;">
             <div style="font-size: 40px; margin-bottom: 16px;">⏳</div>
@@ -341,7 +336,14 @@
                     newScript.appendChild(document.createTextNode(s.innerHTML));
                     s.parentNode.replaceChild(newScript, s);
                 });
-            } catch (err) { window.location.href = url; } 
+            } catch (err) { 
+                // [방어코드] 모달이 뜬 상태에서 네이티브 리다이렉트를 강제로 방지합니다.
+                if (err === 'Server Error') {
+                    if (bar) bar.style.transform = 'scaleX(0)';
+                    return;
+                }
+                window.location.href = url; 
+            } 
             finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
         }
 
@@ -416,7 +418,14 @@
                         s.parentNode.replaceChild(newScript, s);
                     });
                 }
-            } catch (err) { form.submit(); } 
+            } catch (err) { 
+                // [방어코드] 모달이 유지되도록 처리 중단
+                if (err === 'Server Error') {
+                    if (bar) bar.style.transform = 'scaleX(0)';
+                    return;
+                }
+                form.submit(); 
+            } 
             finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
         });
     </script>
