@@ -32,7 +32,6 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
-# [공유 미리보기(OG)를 위한 동적 렌더링 부트스트래퍼]
 BOOTSTRAP_HTML = """
 <!DOCTYPE html>
 <html lang="ko">
@@ -41,7 +40,6 @@ BOOTSTRAP_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>{{ og_title | default('가계쀼 - 공유 가계부') }}</title>
     
-    <!-- 카카오톡 링크 공유 시 동적으로 표시되는 미리보기 정보 -->
     <meta property="og:title" content="{{ og_title | default('가계쀼 - 공유 가계부') }}">
     <meta property="og:description" content="{{ og_desc | default('부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.') }}">
     <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
@@ -192,7 +190,6 @@ def require_login():
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    # [핵심] 봇(크롤러)이 초대 링크로 접근하거나 미인증 사용자가 접근할 때 OG 태그 동적 세팅
     og_title = '가계쀼 - 공유 가계부'
     og_desc = '부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.'
     
@@ -205,9 +202,12 @@ def require_login():
 
     return render_template_string(BOOTSTRAP_HTML, og_title=og_title, og_desc=og_desc)
 
+# [핵심 방어 코드] 500 에러 발생 시 로그인 화면으로 리다이렉트하는 동작 제거 (스켈레톤 프리징 버그 차단)
 @app.errorhandler(500)
 def internal_server_error(e):
-    return redirect(url_for('login'))
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+        return jsonify({'error': '서버 지연이 발생했습니다. 다시 시도해주세요.'}), 500
+    return "<h2 style='text-align:center; margin-top:50px;'>서버 접속이 원활하지 않습니다.<br>새로고침을 눌러주세요.</h2>", 500
 
 def get_target_date():
     now = datetime.now()
@@ -283,6 +283,7 @@ def kakao_callback():
 @app.route('/onboarding', methods=['GET', 'POST'])
 def onboarding():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if user.ledger_id: return spa_redirect(url_for('home'))
     
     error_msg = None
@@ -319,6 +320,7 @@ def onboarding():
 def invite_process():
     hash = request.args.get('hash')
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if user.ledger_id:
         return "<script>localStorage.removeItem('pending_invite'); alert('이미 가계부에 참여 중입니다.'); window.location.href='/home';</script>"
     
@@ -333,6 +335,7 @@ def invite_process():
 @app.route('/invite/<hash>')
 def invite(hash):
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if user.ledger_id:
         return "<script>alert('이미 가계부에 참여 중입니다. 설정에서 기존 가계부를 나간 후 초대를 수락해주세요.'); window.location.href='/home';</script>"
         
@@ -347,7 +350,8 @@ def invite(hash):
 @app.route('/leave_ledger', methods=['POST'])
 def leave_ledger():
     user = User.query.get(request.user_id)
-    if not user or not user.ledger_id:
+    if not user: return spa_redirect(url_for('logout'))
+    if not user.ledger_id:
         return spa_redirect(url_for('onboarding'))
 
     ledger = Ledger.query.get(user.ledger_id)
@@ -429,6 +433,7 @@ def build_home_data(user_id, y, m):
 @app.route('/home')
 def home():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     
@@ -448,6 +453,7 @@ def api_home_data():
 @app.route('/calendar')
 def calendar():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
@@ -497,6 +503,7 @@ def calendar():
 @app.route('/api/calendar_data')
 def api_calendar_data():
     user = User.query.get(request.user_id)
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
     y = int(request.args.get('year'))
     m = int(request.args.get('month'))
     
@@ -537,6 +544,7 @@ def api_calendar_data():
 @app.route('/transactions')
 def transactions():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
@@ -551,6 +559,7 @@ def transactions():
 @app.route('/api/transactions')
 def api_transactions():
     user = User.query.get(request.user_id)
+    if not user: return jsonify({'error': 'Unauthorized'}), 401
     page = int(request.args.get('page', 1))
     per_page = 10
     
@@ -639,6 +648,7 @@ def api_move_category(cat_id):
 @app.route('/settings')
 def settings():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
@@ -788,6 +798,7 @@ def delete_transaction(tx_id):
 @app.route('/search')
 def search():
     user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('logout'))
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     

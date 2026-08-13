@@ -29,11 +29,21 @@
             config.headers = headers;
             
             const response = await originalFetch(resource, config);
+            
+            // [방어코드] 미인증 에러 시에만 로그인 화면으로 전환
             if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
                 localStorage.removeItem('jwt_token');
                 window.location.href = '/login';
                 return Promise.reject('Unauthorized');
             }
+            
+            // [방어코드] 백엔드 500 오류 시 스켈레톤 프리징 방지 및 로그인화면 오작동 차단
+            if (response.status >= 500) {
+                alert('서버 접속 지연이 발생했습니다. 다시 시도해주세요.');
+                window.location.reload();
+                return Promise.reject('Server Error');
+            }
+            
             return response;
         };
     </script>
@@ -249,6 +259,14 @@
             
             try {
                 const response = await fetch(url);
+                
+                // [방어코드] 만약 백엔드가 200 응답이라 하더라도 URL이 /login 으로 떨어졌다면 로그아웃 됨을 인지
+                if (response.url && response.url.includes('/login') && !window.location.pathname.includes('/login')) {
+                    localStorage.removeItem('jwt_token');
+                    window.location.href = '/login';
+                    return;
+                }
+
                 const html = await response.text();
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
