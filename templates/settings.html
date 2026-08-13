@@ -21,7 +21,7 @@
         {% for u in ledger.users %}
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--color-line); border-radius: var(--radius-action);">
             <div style="font-weight: 500; font-size: 14px;">{{ u.nickname }}</div>
-            {% if u.id == session.get('user_id') %}
+            {% if u.id == current_user_id %}
             <div class="chip" style="font-size: 12px; padding: 4px 8px;">나</div>
             {% endif %}
         </div>
@@ -38,7 +38,6 @@
 </div>
 
 <div class="card">
-    <!-- 가계부 초대 섹션 (그리드 슬라이딩 구조 도입) -->
     {% set is_invite_open = ledger.users|length < 2 %}
     <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="window.toggleSlide('invite-wrapper', 'invite-arrow')">
         <h3 style="font-size: 16px; font-weight: 700; margin: 0;">가계부 초대 {% if not is_invite_open %}<span class="chip" style="font-size: 10px; padding: 2px 6px; background: rgba(6, 169, 108, 0.15); color: var(--color-action); margin-left: 4px;">완료</span>{% endif %}</h3>
@@ -86,7 +85,6 @@
 </div>
 
 <div class="card">
-    <!-- 데이터 관리 그룹 슬라이딩 토글화 -->
     <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="window.toggleSlide('data-manage-wrapper', 'data-manage-arrow')">
         <h3 style="font-size: 16px; font-weight: 700; margin: 0;">데이터 관리</h3>
         <span id="data-manage-arrow" class="arrow-icon" style="font-size: 12px; color: var(--color-muted);">▼</span>

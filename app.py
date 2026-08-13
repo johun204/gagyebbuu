@@ -1,12 +1,13 @@
 import os
 import time
+import jwt # requirements.txt 에 PyJWT 추가 필수
 
 # Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
 os.environ['TZ'] = 'Asia/Seoul'
 if hasattr(time, 'tzset'):
     time.tzset()
 
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, render_template_string
 from datetime import datetime, timedelta
 import csv
 import io
@@ -15,18 +16,8 @@ from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
-# [iOS PWA & Vercel 서버리스 세션 유실 방지 보안 설정]
-# 반드시 Vercel 환경변수(Environment Variables)에 SECRET_KEY를 고유값으로 설정해야 합니다.
+# JWT 암호화에 사용될 시크릿 키 (Vercel 환경변수에서 설정 권장)
 app.secret_key = os.environ.get('SECRET_KEY', 'gagye_bbu_fallback_secret_key_987654321')
-
-app.config.update(
-    PERMANENT_SESSION_LIFETIME=timedelta(days=365),
-    SESSION_REFRESH_EACH_REQUEST=True,
-    SESSION_COOKIE_NAME='gagye_bbu_session', # 앱 고유 세션 이름 지정
-    SESSION_COOKIE_SECURE=True,              # Vercel은 기본 HTTPS이므로 True (iOS WebKit 쿠키 보존율 상승)
-    SESSION_COOKIE_HTTPONLY=True,            # JS에서 쿠키 접근 불가 (보안 강화)
-    SESSION_COOKIE_SAMESITE='Lax'            # OAuth(카카오) 콜백은 허용하면서 외부 탈취 방어
-)
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
 if db_url.startswith("postgres://"):
@@ -41,27 +32,109 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
+# [JWT 브라우저 초기 진입용 부트스트래퍼]
+BOOTSTRAP_HTML = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>가계쀼 로딩중...</title>
+    <style>
+        body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#fff; font-family:sans-serif; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #13bd7e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="loader"></div>
+    <script>
+        const token = localStorage.getItem('jwt_token');
+        const currentUrl = window.location.href;
+        
+        if (window.location.pathname.startsWith('/invite/')) {
+            const hash = window.location.pathname.split('/').pop();
+            localStorage.setItem('pending_invite', hash);
+        }
+
+        if (token) {
+            fetch(currentUrl, {
+                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => {
+                if (res.status === 401) {
+                    localStorage.removeItem('jwt_token');
+                    window.location.href = '/login';
+                } else { return res.text(); }
+            })
+            .then(html => {
+                if(html) {
+                    document.open(); document.write(html); document.close();
+                }
+            }).catch(() => { window.location.href = '/login'; });
+        } else {
+            window.location.href = '/login';
+        }
+    </script>
+</body>
+</html>
+"""
+
+# [카카오 로그인 직후 토큰 저장기]
+TOKEN_SAVE_HTML = """
+<!DOCTYPE html>
+<html>
+<head><title>로그인 처리 중...</title></head>
+<body>
+    <script>
+        localStorage.setItem('jwt_token', '{{ token }}');
+        const pending = localStorage.getItem('pending_invite');
+        if (pending) {
+            window.location.href = '/invite_process?hash=' + pending;
+        } else {
+            window.location.href = '/home';
+        }
+    </script>
+</body>
+</html>
+"""
+
 @app.route('/sw.js')
 def serve_sw():
     return app.send_static_file('sw.js')
 
+@app.context_processor
+def inject_user():
+    return dict(current_user_id=getattr(request, 'user_id', None))
+
 @app.before_request
 def require_login():
-    if 'user_id' in session:
-        session.permanent = True
-        session.modified = True
+    public_endpoints = ['login', 'kakao_callback', 'static', 'serve_sw', 'logout']
+    if request.endpoint in public_endpoints:
+        return
 
-    if request.endpoint not in ['login', 'kakao_callback', 'static', 'invite', 'serve_sw']:
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        user = User.query.get(session['user_id'])
-        if not user:
-            session.clear()
-            return redirect(url_for('login'))
+    # JWT 검증 로직
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ')[1]
+        try:
+            payload = jwt.decode(token, app.secret_key, algorithms=['HS256'])
+            request.user_id = payload['user_id']
+            return  # 인증 통과
+        except jwt.ExpiredSignatureError:
+            pass
+        except jwt.InvalidTokenError:
+            pass
+
+    # AJAX 요청인데 토큰이 없거나 유효하지 않으면 401 반환
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    # 브라우저 직접 접근 시 (새로고침 등) 부트스트래퍼 반환하여 JS로 토큰 담아 재요청 유도
+    return render_template_string(BOOTSTRAP_HTML)
 
 @app.errorhandler(500)
 def internal_server_error(e):
-    session.clear()
     return redirect(url_for('login'))
 
 def get_target_date():
@@ -69,17 +142,15 @@ def get_target_date():
     req_year = request.args.get('year')
     req_month = request.args.get('month')
     
-    if req_year == 'today' or req_month == 'today':
-        session['target_year'] = now.year
-        session['target_month'] = now.month
-    else:
-        if 'target_year' not in session: session['target_year'] = now.year
-        if 'target_month' not in session: session['target_month'] = now.month
-        if req_year: session['target_year'] = int(req_year)
-        if req_month: session['target_month'] = int(req_month)
+    target_year = now.year
+    target_month = now.month
     
-    target_year = session['target_year']
-    target_month = session['target_month']
+    if req_year and req_month and req_year != 'today' and req_month != 'today':
+        try:
+            target_year = int(req_year)
+            target_month = int(req_month)
+        except ValueError:
+            pass
     
     p_m = target_month - 1 if target_month > 1 else 12
     p_y = target_year if target_month > 1 else target_year - 1
@@ -105,8 +176,8 @@ def login():
 
 @app.route('/logout')
 def logout():
-    session.clear()
-    return redirect(url_for('login'))
+    # 로그아웃 시 로컬 스토리지의 토큰 파기
+    return "<script>localStorage.removeItem('jwt_token'); window.location.href='/login';</script>"
 
 @app.route('/oauth/kakao/callback')
 def kakao_callback():
@@ -135,28 +206,14 @@ def kakao_callback():
         db.session.add(user)
         db.session.commit()
         
-    session.permanent = True
-    session['user_id'] = user.id
+    # JWT 토큰 생성 (유효기간 1년)
+    token = jwt.encode({'user_id': user.id, 'exp': datetime.utcnow() + timedelta(days=365)}, app.secret_key, algorithm='HS256')
     
-    pending_invite = session.get('pending_invite')
-    if pending_invite:
-        session.pop('pending_invite', None)
-        if user.ledger_id:
-            return "<script>alert('이미 가계부에 참여 중입니다. 설정에서 기존 가계부를 나간 후 초대를 수락해주세요.'); window.location.href='/home';</script>"
-        else:
-            ledger = Ledger.query.filter_by(invite_hash=pending_invite).first()
-            if ledger and len(ledger.users) < 2:
-                user.ledger_id = ledger.id
-                db.session.commit()
-                return redirect(url_for('home'))
-            else:
-                return "<script>alert('유효하지 않거나 이미 인원이 가득 찬 초대 링크입니다.'); window.location.href='/onboarding';</script>"
-            
-    return redirect(url_for('onboarding'))
+    return render_template_string(TOKEN_SAVE_HTML, token=token)
 
 @app.route('/onboarding', methods=['GET', 'POST'])
 def onboarding():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     if user.ledger_id: return redirect(url_for('home'))
     
     error_msg = None
@@ -189,14 +246,24 @@ def onboarding():
                 
     return render_template('onboarding.html', error=error_msg)
 
+@app.route('/invite_process')
+def invite_process():
+    hash = request.args.get('hash')
+    user = User.query.get(request.user_id)
+    if user.ledger_id:
+        return "<script>localStorage.removeItem('pending_invite'); alert('이미 가계부에 참여 중입니다.'); window.location.href='/home';</script>"
+    
+    ledger = Ledger.query.filter_by(invite_hash=hash).first()
+    if ledger and len(ledger.users) < 2:
+        user.ledger_id = ledger.id
+        db.session.commit()
+        return "<script>localStorage.removeItem('pending_invite'); window.location.href='/home';</script>"
+    else:
+        return "<script>localStorage.removeItem('pending_invite'); alert('유효하지 않거나 이미 인원이 가득 찬 초대 링크입니다.'); window.location.href='/onboarding';</script>"
+
 @app.route('/invite/<hash>')
 def invite(hash):
-    if 'user_id' not in session:
-        session['pending_invite'] = hash
-        return redirect(url_for('login'))
-        
-    user = User.query.get(session['user_id'])
-    
+    user = User.query.get(request.user_id)
     if user.ledger_id:
         return "<script>alert('이미 가계부에 참여 중입니다. 설정에서 기존 가계부를 나간 후 초대를 수락해주세요.'); window.location.href='/home';</script>"
         
@@ -210,7 +277,7 @@ def invite(hash):
 
 @app.route('/leave_ledger', methods=['POST'])
 def leave_ledger():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     if not user or not user.ledger_id:
         return redirect(url_for('onboarding'))
 
@@ -292,7 +359,7 @@ def build_home_data(user_id, y, m):
 @app.route('/')
 @app.route('/home')
 def home():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     if not user.ledger_id: return redirect(url_for('onboarding'))
     ledger = Ledger.query.get(user.ledger_id)
     
@@ -307,11 +374,11 @@ def home():
 def api_home_data():
     y = int(request.args.get('year'))
     m = int(request.args.get('month'))
-    return jsonify(build_home_data(session['user_id'], y, m))
+    return jsonify(build_home_data(request.user_id, y, m))
 
 @app.route('/calendar')
 def calendar():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
     
@@ -359,7 +426,7 @@ def calendar():
 
 @app.route('/api/calendar_data')
 def api_calendar_data():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     y = int(request.args.get('year'))
     m = int(request.args.get('month'))
     
@@ -399,7 +466,7 @@ def api_calendar_data():
 
 @app.route('/transactions')
 def transactions():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     
@@ -412,7 +479,7 @@ def transactions():
 
 @app.route('/api/transactions')
 def api_transactions():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     page = int(request.args.get('page', 1))
     per_page = 10
     
@@ -445,13 +512,13 @@ def api_transactions():
 
 @app.route('/api/categories', methods=['GET'])
 def api_get_categories():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     cats = Category.query.filter_by(ledger_id=user.ledger_id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     return jsonify([{'id': c.id, 'name': c.name, 'is_default': c.is_default} for c in cats])
 
 @app.route('/api/category/add', methods=['POST'])
 def api_add_category():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     name = request.json.get('name')
     if name:
         max_order = db.session.query(db.func.max(Category.sort_order)).filter_by(ledger_id=user.ledger_id).scalar() or 0
@@ -461,7 +528,7 @@ def api_add_category():
 
 @app.route('/api/category/<int:cat_id>/edit', methods=['POST'])
 def api_edit_category(cat_id):
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     cat = Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first()
     name = request.json.get('name')
     if cat and name and cat.name != '미분류':
@@ -471,7 +538,7 @@ def api_edit_category(cat_id):
 
 @app.route('/api/category/<int:cat_id>/delete', methods=['POST'])
 def api_delete_category(cat_id):
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     cat = Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first()
     if cat and cat.name != '미분류':
         db.session.delete(cat)
@@ -480,7 +547,7 @@ def api_delete_category(cat_id):
 
 @app.route('/api/category/<int:cat_id>/move', methods=['POST'])
 def api_move_category(cat_id):
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     direction = request.json.get('dir')
     cat = Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first()
     if not cat or cat.name == '미분류': return jsonify({'success': False})
@@ -500,14 +567,14 @@ def api_move_category(cat_id):
 
 @app.route('/settings')
 def settings():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     return render_template('settings.html', ledger=ledger, current_user=user, categories=categories, current_tab='settings')
 
 @app.route('/update_nickname', methods=['POST'])
 def update_nickname():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     new_nickname = request.form.get('nickname')
     update_past = request.form.get('update_past') == 'on'
     
@@ -521,7 +588,7 @@ def update_nickname():
 
 @app.route('/update_ledger_name', methods=['POST'])
 def update_ledger_name():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     new_name = request.form.get('name')
     if new_name:
@@ -531,7 +598,7 @@ def update_ledger_name():
 
 @app.route('/set_budget', methods=['POST'])
 def set_budget():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     
     tb_str = request.form.get('total_budget', '').replace(',', '')
@@ -550,7 +617,7 @@ def set_budget():
 
 @app.route('/transaction', methods=['POST'])
 def add_transaction():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     amt_str = request.form.get('amount', '').replace(',', '')
     amount = int(amt_str) if amt_str.isdigit() else 0
     
@@ -600,7 +667,7 @@ def add_transaction():
 
 @app.route('/transaction/<int:tx_id>/edit', methods=['GET', 'POST'])
 def edit_transaction(tx_id):
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     tx = Transaction.query.filter_by(id=tx_id, ledger_id=user.ledger_id).first()
     if not tx: return redirect(url_for('transactions'))
@@ -635,7 +702,7 @@ def edit_transaction(tx_id):
 
 @app.route('/transaction/<int:tx_id>/delete', methods=['POST'])
 def delete_transaction(tx_id):
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     tx = Transaction.query.filter_by(id=tx_id, ledger_id=user.ledger_id).first()
     if tx:
         db.session.delete(tx)
@@ -648,7 +715,7 @@ def delete_transaction(tx_id):
 
 @app.route('/search')
 def search():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     
     start_date = request.args.get('start_date')
@@ -688,7 +755,7 @@ def search():
 
 @app.route('/export')
 def export_csv():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     transactions = Transaction.query.filter_by(ledger_id=user.ledger_id).order_by(Transaction.datetime_val.desc()).all()
     categories = Category.query.filter_by(ledger_id=user.ledger_id).all()
@@ -715,7 +782,7 @@ def csv_manage():
 
 @app.route('/import', methods=['POST'])
 def import_csv():
-    user = User.query.get(session['user_id'])
+    user = User.query.get(request.user_id)
     ledger = Ledger.query.get(user.ledger_id)
     file = request.files.get('csv_file')
     
@@ -772,7 +839,6 @@ def import_csv():
     return redirect(url_for('csv_manage'))
 
 if __name__ == '__main__':
-    # Vercel 환경 변수 세팅 권장 알림 로그
     if os.environ.get('SECRET_KEY') is None:
-        print("[WARNING] SECRET_KEY is not set in Vercel Environment Variables. Fallback key is being used.")
+        print("[WARNING] SECRET_KEY is not set in Vercel Environment Variables.")
     app.run(host='0.0.0.0', debug=False)
