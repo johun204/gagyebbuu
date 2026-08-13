@@ -11,8 +11,8 @@
     <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 16px;">
         현재 가계부의 모든 내역, 카테고리, 예산 설정을 CSV 파일로 다운로드합니다.
     </p>
-    <!-- [중요] no-spa 클래스와 download 속성을 추가하여 브라우저의 기본 파일 다운로드 기능이 작동하게 합니다. -->
-    <a href="/export" class="btn-action no-spa" download style="width: 100%; text-decoration: none; text-align: center;">CSV 내보내기</a>
+    <!-- 링크(a) 대신 버튼(button)으로 변경하고 자바스크립트 함수 연결 -->
+    <button type="button" class="btn-action" onclick="window.downloadCSV()" style="width: 100%;">CSV 내보내기</button>
 </div>
 
 <div class="card">
@@ -21,10 +21,42 @@
         내보낸 CSV 파일을 업로드하여 데이터를 복원합니다. <br>
         <span style="color: #fe493d;">주의: 기존 데이터와 중복될 수 있으므로 빈 가계부에서 사용하는 것을 권장합니다.</span>
     </p>
-    <!-- 파일 업로드 폼도 SPA 라우터를 거치지 않도록 no-spa 적용 -->
-    <form action="/import" method="POST" enctype="multipart/form-data" class="no-spa" onsubmit="return confirm('CSV 데이터를 불러오시겠습니까?');">
+    <!-- no-spa 클래스를 제거하여 전역 SPA 인터셉터(JWT 헤더 포함 기능)를 타도록 수정 -->
+    <form action="/import" method="POST" enctype="multipart/form-data" onsubmit="if(!confirm('CSV 데이터를 불러오시겠습니까?')) { event.preventDefault(); return false; }">
         <input type="file" name="csv_file" accept=".csv" class="input-field" style="margin-bottom: 16px;" required>
         <button type="submit" class="btn-action" style="width: 100%;">CSV 불러오기</button>
     </form>
 </div>
+
+<script>
+    {
+        // JWT 토큰 인증과 파일 다운로드를 동시에 처리하는 비동기 함수
+        window.downloadCSV = async function() {
+            try {
+                // 전역 fetch를 통해 알아서 헤더에 JWT 토큰이 탑재됨
+                const res = await fetch('/export');
+                if (res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    // 가상의 링크 엘리먼트를 생성해 클릭 이벤트를 유도 (실제 파일 다운로드 발생)
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'ledger.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    
+                    // 메모리 정리
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                } else {
+                    alert('다운로드에 실패했습니다. 다시 시도해주세요.');
+                }
+            } catch(e) {
+                alert('다운로드 중 네트워크 오류가 발생했습니다.');
+            }
+        };
+    }
+</script>
 {% endblock %}
