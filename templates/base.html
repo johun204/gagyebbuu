@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>가계쀼 - 공유 가계부</title>
+    <title>{{ og_title|default('가계쀼 - 공유 가계부') }}</title>
     
-    <meta property="og:title" content="가계쀼 - 공유 가계부">
-    <meta property="og:description" content="부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.">
+    <meta property="og:title" content="{{ og_title|default('가계쀼 - 공유 가계부') }}">
+    <meta property="og:description" content="{{ og_desc|default('부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.') }}">
     <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
-    <meta property="og:url" content="{{ request.host_url }}">
+    <meta property="og:url" content="{{ request.url }}">
     
     <link rel="manifest" href="/static/manifest.json">
     <link rel="apple-touch-icon" href="/static/icon-192.png">
@@ -101,7 +101,6 @@
     <div id="nprogress"></div>
     <main id="app-content">{% block content %}{% endblock %}</main>
 
-    <!-- 네비게이션 컨테이너를 추가하여 가계부 생성 후에도 즉시 갱신되도록 처리 -->
     <div id="nav-container">
         {% if current_user_id and has_ledger %}
         <div class="bottom-nav">
@@ -260,7 +259,6 @@
                 
                 document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
                 
-                // 네비게이션 컨테이너도 함께 업데이트 (가계부 생성 시 즉시 노출용)
                 const docNav = doc.getElementById('nav-container');
                 if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
 
@@ -335,7 +333,6 @@
                     
                     document.getElementById('app-content').innerHTML = doc.getElementById('app-content').innerHTML;
                     
-                    // 폼 제출 시에도 네비게이션 컨테이너 업데이트
                     const docNav = doc.getElementById('nav-container');
                     if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
 

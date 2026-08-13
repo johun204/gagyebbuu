@@ -2,6 +2,7 @@ import os
 import time
 import jwt
 
+# Vercel 등 서버리스 환경에서 한국 시간대(KST)로 시스템 시간 강제 설정
 os.environ['TZ'] = 'Asia/Seoul'
 if hasattr(time, 'tzset'):
     time.tzset()
@@ -15,6 +16,7 @@ from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
+# JWT 암호화에 사용될 시크릿 키 (Vercel 환경변수에서 설정 권장)
 app.secret_key = os.environ.get('SECRET_KEY', 'gagye_bbu_fallback_secret_key_987654321')
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
@@ -30,35 +32,99 @@ with app.app_context():
 KAKAO_CLIENT_ID = os.environ.get('KAKAO_CLIENT_ID', '')
 KAKAO_CLIENT_SECRET = os.environ.get('KAKAO_CLIENT_SECRET', '')
 
+# [공유 미리보기(OG)를 위한 동적 렌더링 부트스트래퍼]
 BOOTSTRAP_HTML = """
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>가계쀼 로딩중...</title>
+    <title>{{ og_title | default('가계쀼 - 공유 가계부') }}</title>
+    
+    <!-- 카카오톡 링크 공유 시 동적으로 표시되는 미리보기 정보 -->
+    <meta property="og:title" content="{{ og_title | default('가계쀼 - 공유 가계부') }}">
+    <meta property="og:description" content="{{ og_desc | default('부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.') }}">
+    <meta property="og:image" content="{{ request.host_url }}static/icon-512.png">
+    <meta property="og:url" content="{{ request.url }}">
+    
+    <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
     <style>
-        body { margin:0; display:flex; justify-content:center; align-items:center; height:100vh; background:#fff; font-family:sans-serif; }
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #13bd7e; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        :root {
+            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
+            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
+            --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
+            --radius-chip: 6px; --radius-action: 16px; --radius-card: 24px; --radius-full: 9999px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; padding: var(--spacing-base); padding-bottom: 130px; max-width: 768px; margin: 0 auto; }
+        
+        .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
+        .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
+        .month-selector h3 { font-size: 20px; font-weight: 700; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
+        .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
+        
+        .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background-color: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--color-line); display: flex; justify-content: space-around; align-items: center; z-index: 1000; padding-bottom: calc(env(safe-area-inset-bottom) + 16px); padding-top: 10px; box-sizing: content-box; }
+        .bottom-nav a { text-decoration: none; color: var(--color-muted); font-size: 12px; font-weight: 500; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; text-align: center; }
+        .bottom-nav a.active { color: var(--color-foreground); font-weight: 700; }
+
+        .skeleton { background: #e0e0e0; background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        .skeleton-text { height: 20px; margin-bottom: 12px; width: 100%; }
+        .skeleton-text.short { width: 50%; }
     </style>
 </head>
 <body>
-    <div class="loader"></div>
+    <main>
+        <div class="month-selector"><a href="#" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" style="visibility:hidden;">▶</a></div>
+        <div class="card">
+            <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
+            <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+                <div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div><div class="skeleton" style="flex:1; height:76px; border-radius:16px;"></div>
+            </div>
+            <div style="padding-top: 16px; border-top: 1px solid var(--color-line);">
+                <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: 4px;"></div>
+                <div class="skeleton" style="width: 100%; height: 10px; border-radius: 4px; margin-bottom: 16px;"></div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 30%; height:12px;"></div></div>
+                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;"><div class="skeleton skeleton-text" style="width: 25%; height:12px;"></div><div class="skeleton skeleton-text" style="width: 20%; height:12px;"></div></div>
+                <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
+            </div>
+        </div>
+        <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
+    </main>
+
+    <div class="bottom-nav">
+        <a href="#" class="nav-link active"><span style="font-size:20px;">🏠</span>홈</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">📅</span>달력</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">📝</span>내역</a>
+        <a href="#" class="nav-link"><span style="font-size:20px;">⚙️</span>설정</a>
+    </div>
+
     <script>
         const token = localStorage.getItem('jwt_token');
         const currentUrl = window.location.href;
+        
         if (window.location.pathname.startsWith('/invite/')) {
-            localStorage.setItem('pending_invite', window.location.pathname.split('/').pop());
+            const hash = window.location.pathname.split('/').pop();
+            localStorage.setItem('pending_invite', hash);
         }
+
         if (token) {
-            fetch(currentUrl, { headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(res => {
-                if (res.status === 401) { localStorage.removeItem('jwt_token'); window.location.href = '/login'; }
-                else { return res.text(); }
+            fetch(currentUrl, {
+                headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
             })
-            .then(html => { if(html) { document.open(); document.write(html); document.close(); } })
-            .catch(() => { window.location.href = '/login'; });
+            .then(res => {
+                if (res.status === 401) {
+                    localStorage.removeItem('jwt_token');
+                    window.location.href = '/login';
+                } else { return res.text(); }
+            })
+            .then(html => {
+                if(html) {
+                    document.open(); document.write(html); document.close();
+                }
+            }).catch(() => { window.location.href = '/login'; });
         } else {
             window.location.href = '/login';
         }
@@ -86,7 +152,6 @@ TOKEN_SAVE_HTML = """
 """
 
 def spa_redirect(target_url):
-    """SPA 환경에서 토큰이 유실되는 302 리다이렉트 대신 JSON 응답으로 대체하는 헬퍼 함수"""
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.form.get('ajax') == '1':
         return jsonify({'redirect': target_url})
     return redirect(target_url)
@@ -127,7 +192,18 @@ def require_login():
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
         return jsonify({'error': 'Unauthorized'}), 401
 
-    return render_template_string(BOOTSTRAP_HTML)
+    # [핵심] 봇(크롤러)이 초대 링크로 접근하거나 미인증 사용자가 접근할 때 OG 태그 동적 세팅
+    og_title = '가계쀼 - 공유 가계부'
+    og_desc = '부부가 함께 쓰는 귀여운 가계부, 수입과 지출을 쉽고 투명하게 관리해보세요.'
+    
+    if request.path.startswith('/invite/'):
+        hash_val = request.path.split('/')[-1]
+        ledger = Ledger.query.filter_by(invite_hash=hash_val).first()
+        if ledger:
+            og_title = f"[{ledger.name}] 가계부에 초대되었습니다."
+            og_desc = "링크를 눌러 공유 가계부에 참여해보세요!"
+
+    return render_template_string(BOOTSTRAP_HTML, og_title=og_title, og_desc=og_desc)
 
 @app.errorhandler(500)
 def internal_server_error(e):
@@ -838,4 +914,6 @@ def import_csv():
     return spa_redirect(url_for('csv_manage'))
 
 if __name__ == '__main__':
+    if os.environ.get('SECRET_KEY') is None:
+        print("[WARNING] SECRET_KEY is not set in Vercel Environment Variables.")
     app.run(host='0.0.0.0', debug=False)
