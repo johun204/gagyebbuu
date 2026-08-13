@@ -201,18 +201,18 @@
 
 <script>
     {
-        // [강화] 이벤트 꼬임 및 더블 렌더링 방지를 위한 인메모리 캐시 시스템
+        // 원본과 동일하게 2번 로딩되지만, 덮어쓰기 로직으로 부드럽게 복원되도록 처리
         window.txDataStore = window.txDataStore || {};
         window.allTxPagesData = window.allTxPagesData || {};
-        window.txSliderCache = window.txSliderCache || {};
-        window.lastTxTabUid = window.lastTxTabUid || "";
 
         window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
         window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
 
+        // 스켈레톤 초기화 시, 이전 화면의 찌꺼기(캐시)가 있다면 그대로 박아둠 (깜빡임 차단)
         window.renderTxSlide = function(uid) {
+            let cached = window.allTxPagesData[uid] ? window.allTxPagesData[uid].cachedHtml : '';
             return `
-                <div id="tx-container-${uid}"></div>
+                <div id="tx-container-${uid}">${cached || ''}</div>
                 <div id="load-more-${uid}" style="text-align: center; padding: 20px;">
                     <button type="button" class="chip" onclick="window.loadMoreTxs('${uid}')" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
                     <div id="loading-text-${uid}" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
@@ -226,34 +226,25 @@
         const prevUid = `${pDate.y}_${pDate.m}`;
         const nextUid = `${nDate.y}_${nDate.m}`;
 
-        // 네트워크 응답에 의한 DOM 초기화를 방어하고 캐시된 렌더링 내역 즉시 복원
-        if (window.txSliderCache[currUid] && window.lastTxTabUid === currUid) {
-            const slider = document.getElementById('tx-slider');
-            if (slider) slider.innerHTML = window.txSliderCache[currUid];
-            setTimeout(() => { if(window.refreshTxObservers) window.refreshTxObservers(); }, 100);
-        } else {
-            window.lastTxTabUid = currUid;
-            const sCurr = document.getElementById('slide-tx-curr');
-            const sPrev = document.getElementById('slide-tx-prev');
-            const sNext = document.getElementById('slide-tx-next');
-            if (sCurr) sCurr.innerHTML = window.renderTxSlide(currUid);
-            if (sPrev) sPrev.innerHTML = window.renderTxSlide(prevUid);
-            if (sNext) sNext.innerHTML = window.renderTxSlide(nextUid);
-            
-            window.loadMoreTxs(currUid);
-            window.loadMoreTxs(prevUid);
-            window.loadMoreTxs(nextUid);
-        }
+        // SWR 환경에서 스크립트 재실행 시 1페이지부터 다시 무조건 로딩하도록 강제 리셋 (캐시 껍데기는 유지)
+        if (window.allTxPagesData[currUid]) window.allTxPagesData[currUid].page = 1;
+        else window.allTxPagesData[currUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+
+        if (window.allTxPagesData[prevUid]) window.allTxPagesData[prevUid].page = 1;
+        else window.allTxPagesData[prevUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+
+        if (window.allTxPagesData[nextUid]) window.allTxPagesData[nextUid].page = 1;
+        else window.allTxPagesData[nextUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+
+        document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(currUid);
+        document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(prevUid);
+        document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nextUid);
 
         window.loadMoreTxs = async function(uid, overridePage) {
             let [y, m] = uid.split('_');
-            if (!window.allTxPagesData[uid]) {
-                window.allTxPagesData[uid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '' };
-            }
             let s = window.allTxPagesData[uid];
             if (overridePage) s.page = overridePage;
 
-            // 이미 불러오는 중이거나 더 이상 내역이 없으면 철저히 차단
             if (s.isLoading || !s.hasNext) return;
             s.isLoading = true;
             
@@ -269,12 +260,13 @@
                 const container = document.getElementById(`tx-container-${uid}`);
                 if (!container) { s.isLoading = false; return; }
                 
-                if (s.page === 1) container.innerHTML = '';
-                
+                let htmlBuffer = '';
+                if (s.page === 1) s.lastRenderedDate = '';
+
                 data.transactions.forEach(tx => {
                     window.txDataStore[tx.id] = tx;
                     if (tx.date !== s.lastRenderedDate) {
-                        container.innerHTML += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
+                        htmlBuffer += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
                         s.lastRenderedDate = tx.date;
                     }
                     const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
@@ -282,7 +274,7 @@
                     const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
                     const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
 
-                    container.innerHTML += `
+                    htmlBuffer += `
                         <div class="tx-item" style="border-left: 4px solid ${color};">
                             <div style="flex: 1;">
                                 <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
@@ -303,6 +295,15 @@
                 s.page++;
                 s.isLoading = false;
 
+                // [핵심] 첫 페이지 데이터면 무자비하게 덮어쓰기, 아니면 이어붙이기 (로딩 전 비우기 없음!)
+                if (s.page === 2) {
+                    container.innerHTML = htmlBuffer;
+                } else {
+                    container.innerHTML += htmlBuffer;
+                }
+                
+                s.cachedHtml = container.innerHTML;
+
                 const newBtn = document.querySelector(`#load-more-${uid} button`);
                 const newTxt = document.getElementById(`loading-text-${uid}`);
                 
@@ -314,16 +315,15 @@
                         if(newTxt) newTxt.style.display = 'block';
                     } else {
                         container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--color-muted);">해당 월의 내역이 없습니다.</div>`;
+                        s.cachedHtml = container.innerHTML;
                     }
-                }
-                
-                // 데이터 삽입 직후 메모리 캐시에 DOM 구조 저장
-                const sliderDom = document.getElementById('tx-slider');
-                if (sliderDom && window.lastTxTabUid) {
-                    window.txSliderCache[window.lastTxTabUid] = sliderDom.innerHTML;
                 }
             } catch(e) { s.isLoading = false; }
         };
+
+        window.loadMoreTxs(currUid);
+        window.loadMoreTxs(prevUid);
+        window.loadMoreTxs(nextUid);
 
         if(window.txObserver) window.txObserver.disconnect();
         window.txObserver = new IntersectionObserver((entries) => { 
@@ -337,7 +337,7 @@
         
         window.refreshTxObservers = function() {
             window.txObserver.disconnect();
-            const target = document.getElementById(`load-more-${window.lastTxTabUid}`);
+            const target = document.getElementById(`load-more-${currUid}`);
             if(target) window.txObserver.observe(target);
         };
         setTimeout(window.refreshTxObservers, 500);
@@ -369,21 +369,29 @@
                 let pId = `${pDate.y}_${pDate.m}`;
                 let nId = `${nDate.y}_${nDate.m}`;
 
-                window.lastTxTabUid = cId;
+                // 슬라이더 이동 시 기존 캐시 초기화 대신 1페이지부터 백그라운드 무조건 갱신 명령 세팅
+                if (!window.allTxPagesData[cId]) window.allTxPagesData[cId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+                else window.allTxPagesData[cId].page = 1;
+
+                if (!window.allTxPagesData[pId]) window.allTxPagesData[pId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+                else window.allTxPagesData[pId].page = 1;
+
+                if (!window.allTxPagesData[nId]) window.allTxPagesData[nId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
+                else window.allTxPagesData[nId].page = 1;
+
+                document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId);
+                document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
+                document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
                 
-                if (window.txSliderCache[cId]) {
-                    slider.innerHTML = window.txSliderCache[cId];
-                    window.refreshTxObservers();
-                } else {
-                    document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId);
-                    document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
-                    document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
-                    
-                    window.allTxPagesData[cId] = null; window.loadMoreTxs(cId);
-                    if(!window.allTxPagesData[pId]) window.loadMoreTxs(pId);
-                    if(!window.allTxPagesData[nId]) window.loadMoreTxs(nId);
-                    window.refreshTxObservers();
-                }
+                window.loadMoreTxs(cId);
+                window.loadMoreTxs(pId);
+                window.loadMoreTxs(nId);
+                
+                window.txObserver.disconnect();
+                setTimeout(() => {
+                    const target = document.getElementById(`load-more-${cId}`);
+                    if(target) window.txObserver.observe(target);
+                }, 500);
                 
                 window.history.replaceState(null, '', `/transactions?year=${window.currentTxY}&month=${window.currentTxM}`);
             }, 300);
@@ -441,45 +449,32 @@
             else input.value = parseInt(val, 10).toLocaleString();
         };
 
-        // [방어코드] 수입/지출 전환 시 모든 요소를 Null-check 하여 이벤트 증발(꼬임)을 100% 방지
+        // 안전하게 요소들을 직접 제어
         window.setTxType = function(type) {
-            const txTypeInput = document.getElementById('tx_type');
-            const btnExpense = document.getElementById('btn-expense');
-            const btnIncome = document.getElementById('btn-income');
-            const amountInput = document.getElementById('amount_input');
-            
-            if(txTypeInput) txTypeInput.value = type;
-            
+            document.getElementById('tx_type').value = type;
             if (type === '지출') {
-                if(btnExpense) btnExpense.classList.add('active');
-                if(btnIncome) btnIncome.classList.remove('active');
-                if(amountInput) amountInput.placeholder = '지출 금액(원)';
+                document.getElementById('btn-expense').classList.add('active');
+                document.getElementById('btn-income').classList.remove('active');
+                document.getElementById('amount_input').placeholder = '지출 금액(원)';
             } else {
-                if(btnIncome) btnIncome.classList.add('active');
-                if(btnExpense) btnExpense.classList.remove('active');
-                if(amountInput) amountInput.placeholder = '수입 금액(원)';
+                document.getElementById('btn-income').classList.add('active');
+                document.getElementById('btn-expense').classList.remove('active');
+                document.getElementById('amount_input').placeholder = '수입 금액(원)';
             }
         };
 
         window.setTime = function() {
-            const timeIn = document.getElementById('tx_time');
-            const pickerIn = document.getElementById('time_picker_input');
-            if(timeIn && pickerIn) timeIn.value = pickerIn.value;
-            const dialog = document.getElementById('time-dialog');
-            if(dialog) dialog.close();
+            document.getElementById('tx_time').value = document.getElementById('time_picker_input').value;
+            document.getElementById('time-dialog').close();
         };
         
         window.setTimeEdit = function() {
-            const timeIn = document.getElementById('edit_time_input');
-            const pickerIn = document.getElementById('time_picker_input_edit');
-            if(timeIn && pickerIn) timeIn.value = pickerIn.value;
-            const dialog = document.getElementById('time-dialog-edit');
-            if(dialog) dialog.close();
+            document.getElementById('edit_time_input').value = document.getElementById('time_picker_input_edit').value;
+            document.getElementById('time-dialog-edit').close();
         };
 
         window.openCatModal = function() { 
-            const d = document.getElementById('cat-dialog');
-            if(d) { d.showModal(); window.loadCategories(); }
+            document.getElementById('cat-dialog').showModal(); window.loadCategories(); 
         };
         
         window.loadCategories = async function() {
@@ -516,101 +511,88 @@
             if(select) { select.innerHTML = selectHtml; select.value = val; }
             if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = evalue; }
         };
+        
         window.addCat = async function() { const n = document.getElementById('new_cat_name'); if (!n || !n.value) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: n.value})}); n.value = ''; window.loadCategories(); };
         window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
         window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
         window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
         window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
 
+        // 내역 등록이나 수정 시 해당 월 내역 리셋 (캐시는 비워서 전체를 새로 그리도록 함)
         window.resetAndFetchCurrentList = function() {
-            window.txSliderCache = {}; 
-            window.allTxPagesData = {}; 
             let cUid = `${window.currentTxY}_${window.currentTxM}`;
-            const cDom = document.getElementById('slide-tx-curr');
-            if(cDom) {
-                cDom.innerHTML = window.renderTxSlide(cUid);
-                window.loadMoreTxs(cUid);
-                setTimeout(window.refreshTxObservers, 100);
-            }
+            window.allTxPagesData[cUid].page = 1;
+            window.allTxPagesData[cUid].cachedHtml = '';
+            document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cUid);
+            window.loadMoreTxs(cUid);
         };
 
-        const txAddForm = document.getElementById('tx-add-form');
-        if(txAddForm) {
-            txAddForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const fd = new FormData(e.target); fd.append('ajax', '1');
-                try {
-                    const res = await fetch(e.target.action, { method: 'POST', body: fd });
-                    if (res.ok) {
-                        const amtIn = document.getElementById('amount_input'); if(amtIn) amtIn.value = '';
-                        const titleIn = document.getElementById('title_input'); if(titleIn) titleIn.value = '';
-                        const memoIn = document.getElementById('memo_input'); if(memoIn) memoIn.value = '';
-                        const excl = document.getElementById('exclude_analysis'); if(excl) excl.checked = false;
-                        
-                        const t = document.getElementById('toast-popup'); 
-                        if(t) { t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-                        
-                        window.resetAndFetchCurrentList();
-                    }
-                } catch(err) { /* 공통 모달에서 처리 */ }
-            });
-        }
+        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            try {
+                const res = await fetch(e.target.action, { method: 'POST', body: fd });
+                if (res.ok) {
+                    document.getElementById('amount_input').value = '';
+                    document.getElementById('title_input').value = '';
+                    document.getElementById('memo_input').value = '';
+                    document.getElementById('exclude_analysis').checked = false;
+                    
+                    const t = document.getElementById('toast-popup'); 
+                    if(t) { t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+                    
+                    window.resetAndFetchCurrentList();
+                }
+            } catch(err) { /* 공통 모달에서 처리 */ }
+        });
 
         window.setEditTxType = function(type) {
-            const editTypeIn = document.getElementById('edit_tx_type');
-            const bExp = document.getElementById('edit-btn-expense');
-            const bInc = document.getElementById('edit-btn-income');
-            
-            if(editTypeIn) editTypeIn.value = type;
+            document.getElementById('edit_tx_type').value = type;
             if (type === '지출') { 
-                if(bExp) bExp.classList.add('active'); 
-                if(bInc) bInc.classList.remove('active'); 
+                document.getElementById('edit-btn-expense').classList.add('active'); 
+                document.getElementById('edit-btn-income').classList.remove('active'); 
             } else { 
-                if(bInc) bInc.classList.add('active'); 
-                if(bExp) bExp.classList.remove('active'); 
+                document.getElementById('edit-btn-income').classList.add('active'); 
+                document.getElementById('edit-btn-expense').classList.remove('active'); 
             }
         };
 
         window.openEditSheet = function(id) {
             const tx = window.txDataStore[id];
             if(!tx) return;
-            const frm = document.getElementById('tx-edit-form');
-            if(frm) frm.action = `/transaction/${tx.id}/edit`;
+            document.getElementById('tx-edit-form').action = `/transaction/${tx.id}/edit`;
             
             window.setEditTxType(tx.tx_type);
-            const amtIn = document.getElementById('edit_amount_input'); if(amtIn) amtIn.value = tx.amount.toLocaleString();
-            const tranIn = document.getElementById('edit_transactor'); if(tranIn) tranIn.value = tx.transactor;
-            const titIn = document.getElementById('edit_title_input'); if(titIn) titIn.value = tx.title;
-            const catIn = document.getElementById('edit_category_select'); if(catIn) catIn.value = tx.category_id || document.querySelector('#edit_category_select option').value;
-            const dateIn = document.getElementById('edit_date_input'); if(dateIn) dateIn.value = tx.date;
-            const timeIn = document.getElementById('edit_time_input'); if(timeIn) timeIn.value = tx.time;
-            const pickIn = document.getElementById('time_picker_input_edit'); if(pickIn) pickIn.value = tx.time;
-            const memIn = document.getElementById('edit_memo_input'); if(memIn) memIn.value = tx.memo || "";
-            const exclIn = document.getElementById('edit_exclude_analysis'); if(exclIn) exclIn.checked = tx.exclude_analysis;
+            document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
+            document.getElementById('edit_transactor').value = tx.transactor;
+            document.getElementById('edit_title_input').value = tx.title;
+            document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
+            document.getElementById('edit_date_input').value = tx.date;
+            document.getElementById('edit_time_input').value = tx.time;
+            document.getElementById('time_picker_input_edit').value = tx.time;
+            document.getElementById('edit_memo_input').value = tx.memo || "";
+            document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
             
-            const overlay = document.getElementById('edit-sheet-overlay'); if(overlay) overlay.classList.add('active');
-            const sheet = document.getElementById('edit-bottom-sheet'); if(sheet) sheet.classList.add('active');
+            document.getElementById('edit-sheet-overlay').classList.add('active');
+            document.getElementById('edit-bottom-sheet').classList.add('active');
         };
 
         window.closeEditSheet = function() {
-            const overlay = document.getElementById('edit-sheet-overlay'); if(overlay) overlay.classList.remove('active');
-            const sheet = document.getElementById('edit-bottom-sheet'); if(sheet) sheet.classList.remove('active');
+            document.getElementById('edit-sheet-overlay').classList.remove('active');
+            document.getElementById('edit-bottom-sheet').classList.remove('active');
         };
 
-        const txEditForm = document.getElementById('tx-edit-form');
-        if(txEditForm) {
-            txEditForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const fd = new FormData(e.target); fd.append('ajax', '1');
-                const res = await fetch(e.target.action, {method: 'POST', body: fd});
-                if(res.ok) {
-                    window.closeEditSheet();
-                    const t = document.getElementById('toast-popup'); 
-                    if(t) { t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-                    window.resetAndFetchCurrentList();
-                }
-            });
-        }
+        document.getElementById('tx-edit-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const fd = new FormData(e.target); fd.append('ajax', '1');
+            const res = await fetch(e.target.action, {method: 'POST', body: fd});
+            if(res.ok) {
+                window.closeEditSheet();
+                const t = document.getElementById('toast-popup'); 
+                if(t) { t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
+                window.resetAndFetchCurrentList();
+            }
+        });
 
         window.deleteTx = async function(id) {
             if(!confirm('정말 삭제하시겠습니까?')) return;
