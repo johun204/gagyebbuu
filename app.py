@@ -155,7 +155,6 @@ def serve_sw():
 
 @app.context_processor
 def inject_user():
-    # 사용자가 가계부에 가입되어 있는지 여부를 하단 메뉴바 표시 등에 활용합니다.
     user_id = getattr(request, 'user_id', None)
     has_ledger = False
     if user_id:
@@ -832,8 +831,12 @@ def export_csv():
         writer.writerow(['#TX_ROW', tx.datetime_val.strftime('%Y-%m-%d'), tx.datetime_val.strftime('%H:%M'), 
                          tx.tx_type, tx.transactor, tx.category.name, tx.title, tx.memo, tx.amount, int(tx.exclude_analysis), tx.user.nickname])
                          
-    output.seek(0)
-    return Response(output.getvalue().encode('utf-8-sig'), mimetype="text/csv", headers={"Content-Disposition": "attachment;filename=ledger.csv"})
+    csv_data = output.getvalue().encode('utf-8-sig')
+    
+    # 다운로드 명시를 위한 헤더
+    response = Response(csv_data, mimetype="application/octet-stream")
+    response.headers["Content-Disposition"] = 'attachment; filename="ledger.csv"'
+    return response
 
 @app.route('/csv_manage')
 def csv_manage():
