@@ -15,11 +15,18 @@ from models import db, User, Ledger, Category, Transaction, Notification
 
 app = Flask(__name__)
 
-app.secret_key = os.environ.get('SECRET_KEY', 'dev_key')
+# [iOS PWA & Vercel 서버리스 세션 유실 방지 보안 설정]
+# 반드시 Vercel 환경변수(Environment Variables)에 SECRET_KEY를 고유값으로 설정해야 합니다.
+app.secret_key = os.environ.get('SECRET_KEY', 'gagye_bbu_fallback_secret_key_987654321')
 
-# 세션 영구 유지 및 매 요청 시 갱신 설정 (로그인 풀림 방지)
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
-app.config['SESSION_REFRESH_EACH_REQUEST'] = True
+app.config.update(
+    PERMANENT_SESSION_LIFETIME=timedelta(days=365),
+    SESSION_REFRESH_EACH_REQUEST=True,
+    SESSION_COOKIE_NAME='gagye_bbu_session', # 앱 고유 세션 이름 지정
+    SESSION_COOKIE_SECURE=True,              # Vercel은 기본 HTTPS이므로 True (iOS WebKit 쿠키 보존율 상승)
+    SESSION_COOKIE_HTTPONLY=True,            # JS에서 쿠키 접근 불가 (보안 강화)
+    SESSION_COOKIE_SAMESITE='Lax'            # OAuth(카카오) 콜백은 허용하면서 외부 탈취 방어
+)
 
 db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
 if db_url.startswith("postgres://"):
@@ -409,7 +416,6 @@ def api_transactions():
     page = int(request.args.get('page', 1))
     per_page = 10
     
-    # URL 파라미터가 명시되어있으면 세션보다 우선 적용 (내역 탭 무한 스와이프 용)
     y = request.args.get('year')
     m = request.args.get('month')
     if y and m:
@@ -766,4 +772,7 @@ def import_csv():
     return redirect(url_for('csv_manage'))
 
 if __name__ == '__main__':
+    # Vercel 환경 변수 세팅 권장 알림 로그
+    if os.environ.get('SECRET_KEY') is None:
+        print("[WARNING] SECRET_KEY is not set in Vercel Environment Variables. Fallback key is being used.")
     app.run(host='0.0.0.0', debug=False)
