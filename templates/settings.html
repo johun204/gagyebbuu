@@ -114,15 +114,6 @@
 
 <script>
     {
-        window.formatNumber = function(input) {
-            let val = input.value.replace(/[^0-9]/g, '');
-            if(val === '') {
-                input.value = '';
-            } else {
-                input.value = parseInt(val, 10).toLocaleString();
-            }
-        };
-
         window.copyLink = function() {
             const copyText = document.getElementById("invite-link");
             copyText.select();

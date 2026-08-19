@@ -173,6 +173,12 @@
     </dialog>
 
     <script>
+        window.formatNumber = function(input) {
+            if (!input) return;
+            let val = input.value.replace(/[^0-9]/g, '');
+            input.value = val === '' ? '' : parseInt(val, 10).toLocaleString();
+        };
+
         window.getDowStr = function(dateStr) {
             const days = ['일','월','화','수','목','금','토'];
             const d = new Date(dateStr + 'T00:00:00');
@@ -315,23 +321,14 @@
             bar.style.transition = 'transform 0.2s ease';
             bar.style.transform = 'scaleX(0.4)';
             
-            let isNetworkDone = false;
             document.getElementById('app-content').innerHTML = getSkeletonHtml(url);
-            
-            // [강화된 기능] Stale-while-revalidate (오프라인 캐시 선표출)
-            if ('caches' in window) {
-                caches.match(url).then(async (res) => {
-                    if (res && !isNetworkDone) {
-                        const html = await res.text();
-                        if (!isNetworkDone) applyDOM(html, url, false);
-                    }
-                });
-            }
-            
+
+            // 오프라인/캐시 응답은 Service Worker(sw.js)의 fetch 핸들러가 이 fetch() 호출을
+            // 가로채서 처리한다 (네트워크 실패 시 캐시 응답 반환). 페이지 쪽에서 별도로
+            // caches.match/put을 하면 SW 캐시와 이름이 어긋나 서로 지워버리는 문제가 있어 제거함.
             try {
                 const response = await fetch(url);
-                isNetworkDone = true;
-                
+
                 if (response.url && response.url.includes('/login') && !window.location.pathname.includes('/login')) {
                     localStorage.removeItem('jwt_token');
                     window.location.href = '/login';
@@ -340,13 +337,7 @@
 
                 const html = await response.text();
                 applyDOM(html, url, pushState);
-                
-                if ('caches' in window) {
-                    caches.open('gagye-bbu-cache-v3').then(cache => {
-                        cache.put(url, new Response(html, {headers: {'Content-Type': 'text/html'}}));
-                    });
-                }
-            } catch (err) { 
+            } catch (err) {
                 if (err === 'Server Error') {
                     if (bar) bar.style.transform = 'scaleX(0)';
                     return;

@@ -442,13 +442,6 @@
             });
         }
 
-        window.formatNumber = function(input) {
-            if(!input) return;
-            let val = input.value.replace(/[^0-9]/g, '');
-            if(val === '') input.value = '';
-            else input.value = parseInt(val, 10).toLocaleString();
-        };
-
         // 안전하게 요소들을 직접 제어
         window.setTxType = function(type) {
             document.getElementById('tx_type').value = type;

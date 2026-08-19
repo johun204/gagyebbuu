@@ -362,12 +362,6 @@
             }
         });
 
-        window.formatNumber = function(input) {
-            let val = input.value.replace(/[^0-9]/g, '');
-            if(val === '') input.value = '';
-            else input.value = parseInt(val, 10).toLocaleString();
-        };
-        
         window.setCalTime = function() {
             document.getElementById('cal_time_input').value = document.getElementById('cal_time_picker_input').value;
             document.getElementById('cal-time-dialog').close();

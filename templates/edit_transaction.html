@@ -82,15 +82,6 @@
 
 <script>
     {
-        window.formatNumber = function(input) {
-            let val = input.value.replace(/[^0-9]/g, '');
-            if(val === '') {
-                input.value = '';
-            } else {
-                input.value = parseInt(val, 10).toLocaleString();
-            }
-        };
-
         window.setTxTypeEdit = function(type) {
             document.getElementById('tx_type_edit').value = type;
             if (type === '지출') {

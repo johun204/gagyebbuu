@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><title>로그인 처리 중...</title></head>
+<body>
+    <script>
+        localStorage.setItem('jwt_token', '{{ token }}');
+        const pending = localStorage.getItem('pending_invite');
+        if (pending) {
+            window.location.href = '/invite_process?hash=' + pending;
+        } else {
+            window.location.href = '/home';
+        }
+    </script>
+</body>
+</html>

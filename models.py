@@ -26,6 +26,10 @@ class Category(db.Model):
     sort_order = db.Column(db.Integer, default=0)
 
 class Transaction(db.Model):
+    __table_args__ = (
+        db.Index('ix_transaction_ledger_datetime', 'ledger_id', 'datetime_val'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     ledger_id = db.Column(db.Integer, db.ForeignKey('ledger.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
