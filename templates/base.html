@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{{ og_title|default('가계쀼 - 공유 가계부') }}</title>
     
     <meta property="og:title" content="{{ og_title|default('가계쀼 - 공유 가계부') }}">
@@ -86,10 +86,11 @@
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5; 
-            padding: var(--spacing-base); padding-bottom: 130px; 
-            max-width: 768px; margin: 0 auto; 
+        body {
+            font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); line-height: 1.5;
+            padding: var(--spacing-base); padding-bottom: 130px;
+            padding-top: calc(env(safe-area-inset-top) + var(--spacing-base));
+            max-width: 768px; margin: 0 auto;
         }
 
         #nprogress { position: fixed; top: 0; left: 0; right: 0; height: 3px; background: var(--color-action); z-index: 9999; transform: scaleX(0); transform-origin: left; transition: transform 0.2s ease; }
@@ -115,7 +116,7 @@
         .flex-row > .input-wrapper { flex: 1 1 130px; box-sizing: border-box; min-width: 0; }
         
         .month-selector { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-base); }
-        .month-selector h3 { font-size: 20px; font-weight: 700; cursor: pointer; padding: 4px 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
+        .month-selector h3 { font-size: 20px; font-weight: 700; cursor: pointer; padding: 4px 12px; }
         .month-selector a { text-decoration: none; color: var(--color-foreground); font-size: 24px; padding: 0 10px; }
 
         dialog { border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }

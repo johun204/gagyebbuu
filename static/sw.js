@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v3';
+const CACHE_NAME = 'gagye-bbu-cache-v4';
 const STATIC_URLS = [
     '/',
     '/home',
@@ -61,12 +61,30 @@ self.addEventListener('notificationclick', event => {
 
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
-    
+
     // API 통신은 캐시하지 않고 항상 네트워크 요청
     if (event.request.url.includes('/api/')) {
         return;
     }
-    
+
+    if (event.request.mode === 'navigate') {
+        // 최상위 페이지 진입(PWA 아이콘 실행, 새로고침)은 브라우저가 인증 헤더를 붙일 수 없어서
+        // 서버가 항상 로그인 여부와 무관한 로딩 셸(bootstrap.html)을 내려준다. 이 셸은 사용자
+        // 데이터가 없는 고정 UI라 캐시가 있으면 즉시 그려주고, 최신본은 백그라운드로 갱신해
+        // 다음 실행 때 반영한다 (매번 서버 응답을 기다리느라 흰 화면이 오래 뜨는 문제 방지).
+        event.respondWith(
+            caches.match(event.request).then(cached => {
+                const network = fetch(event.request).then(response => {
+                    const resClone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+                    return response;
+                }).catch(() => cached || caches.match('/'));
+                return cached || network;
+            })
+        );
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
             .then(response => {
