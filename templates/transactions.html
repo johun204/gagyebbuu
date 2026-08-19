@@ -9,9 +9,6 @@
     .tx-memo { font-size: 13px; color: var(--color-muted); margin-top: 4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block; }
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
-    
-    #toast-popup { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    #toast-popup.show { opacity: 1; }
 
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
@@ -24,8 +21,6 @@
 </style>
 
 {% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
-
-<div id="toast-popup">내역이 성공적으로 처리되었습니다.</div>
 
 <div class="month-selector">
     <a href="javascript:void(0)" onclick="window.shiftTxMonth(-1)" class="no-spa">◀</a> 
@@ -50,13 +45,15 @@
             <div class="input-wrapper"><input type="text" inputmode="numeric" id="amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
         
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            {% for u in ledger.users %}
+            <button type="button" class="btn-tab {% if u.id == current_user.id %}active{% endif %}" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
+            {% endfor %}
+            <button type="button" class="btn-tab" data-value="함께" onclick="window.setTransactor(this)">함께</button>
+            <input type="hidden" name="transactor" value="{{ current_user.nickname }}">
+        </div>
+
         <div class="flex-row">
-            <div class="input-wrapper" style="flex: 0 0 100px;">
-                <select name="transactor" required class="input-field">
-                    {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
-                    <option value="함께">함께</option>
-                </select>
-            </div>
             <div class="input-wrapper"><input type="text" id="title_input" name="title" class="input-field" placeholder="제목 (예: 스타벅스)" required></div>
         </div>
         
@@ -120,13 +117,15 @@
             <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" oninput="window.formatNumber(this)" required></div>
         </div>
         
+        <div id="edit-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
+            {% for u in ledger.users %}
+            <button type="button" class="btn-tab" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
+            {% endfor %}
+            <button type="button" class="btn-tab" data-value="함께" onclick="window.setTransactor(this)">함께</button>
+            <input type="hidden" name="transactor">
+        </div>
+
         <div class="flex-row">
-            <div class="input-wrapper" style="flex: 0 0 100px;">
-                <select name="transactor" id="edit_transactor" required class="input-field">
-                    {% for u in ledger.users %}<option value="{{ u.nickname }}">{{ u.nickname }}</option>{% endfor %}
-                    <option value="함께">함께</option>
-                </select>
-            </div>
             <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" required></div>
         </div>
         
@@ -505,11 +504,38 @@
             if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = evalue; }
         };
         
-        window.addCat = async function() { const n = document.getElementById('new_cat_name'); if (!n || !n.value) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: n.value})}); n.value = ''; window.loadCategories(); };
+        window.addCat = async function() {
+            const n = document.getElementById('new_cat_name'); if (!n || !n.value) return;
+            try {
+                const res = await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: n.value})});
+                if (!res.ok) throw new Error();
+                n.value = ''; window.loadCategories();
+            } catch(err) { window.showToast('분류 추가에 실패했습니다.', 'error'); }
+        };
         window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
-        window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
-        window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
-        window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
+        window.saveCat = async function(id) {
+            const name = document.getElementById(`cat-name-${id}`).value;
+            try {
+                const res = await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 수정에 실패했습니다.', 'error'); }
+        };
+        window.deleteCat = async function(id) {
+            if (!confirm('삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/category/${id}/delete`, { method: 'POST' });
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 삭제에 실패했습니다.', 'error'); }
+        };
+        window.moveCat = async function(id, dir) {
+            try {
+                const res = await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})});
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 순서 변경에 실패했습니다.', 'error'); }
+        };
 
         // 내역 등록이나 수정 시 해당 월 내역 리셋 (캐시는 비워서 전체를 새로 그리도록 함)
         window.resetAndFetchCurrentList = function() {
@@ -522,6 +548,9 @@
 
         document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            if (btn.disabled) return;
+            btn.disabled = true;
             const fd = new FormData(e.target); fd.append('ajax', '1');
             try {
                 const res = await fetch(e.target.action, { method: 'POST', body: fd });
@@ -530,13 +559,17 @@
                     document.getElementById('title_input').value = '';
                     document.getElementById('memo_input').value = '';
                     document.getElementById('exclude_analysis').checked = false;
-                    
-                    const t = document.getElementById('toast-popup'); 
-                    if(t) { t.innerText = "등록이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-                    
+
+                    window.showToast('등록이 완료되었습니다.', 'success');
                     window.resetAndFetchCurrentList();
+                } else {
+                    window.showToast('등록에 실패했습니다. 다시 시도해주세요.', 'error');
                 }
-            } catch(err) { /* 공통 모달에서 처리 */ }
+            } catch(err) {
+                window.showToast('네트워크 오류로 등록하지 못했습니다.', 'error');
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         window.setEditTxType = function(type) {
@@ -557,7 +590,7 @@
             
             window.setEditTxType(tx.tx_type);
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
-            document.getElementById('edit_transactor').value = tx.transactor;
+            window.syncTransactorGroup(document.getElementById('edit-transactor-group'), tx.transactor);
             document.getElementById('edit_title_input').value = tx.title;
             document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
             document.getElementById('edit_date_input').value = tx.date;
@@ -577,22 +610,39 @@
 
         document.getElementById('tx-edit-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            if (btn.disabled) return;
+            btn.disabled = true;
             const fd = new FormData(e.target); fd.append('ajax', '1');
-            const res = await fetch(e.target.action, {method: 'POST', body: fd});
-            if(res.ok) {
-                window.closeEditSheet();
-                const t = document.getElementById('toast-popup'); 
-                if(t) { t.innerText = "수정이 완료되었습니다."; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); }
-                window.resetAndFetchCurrentList();
+            try {
+                const res = await fetch(e.target.action, {method: 'POST', body: fd});
+                if(res.ok) {
+                    window.closeEditSheet();
+                    window.showToast('수정이 완료되었습니다.', 'success');
+                    window.resetAndFetchCurrentList();
+                } else {
+                    window.showToast('수정에 실패했습니다. 다시 시도해주세요.', 'error');
+                }
+            } catch(err) {
+                window.showToast('네트워크 오류로 수정하지 못했습니다.', 'error');
+            } finally {
+                btn.disabled = false;
             }
         });
 
         window.deleteTx = async function(id) {
             if(!confirm('정말 삭제하시겠습니까?')) return;
-            let fd = new FormData(); fd.append('ajax', '1');
-            let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
-            if(res.ok) {
-                window.resetAndFetchCurrentList();
+            try {
+                let fd = new FormData(); fd.append('ajax', '1');
+                let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
+                if(res.ok) {
+                    window.showToast('삭제되었습니다.', 'success');
+                    window.resetAndFetchCurrentList();
+                } else {
+                    window.showToast('삭제에 실패했습니다. 다시 시도해주세요.', 'error');
+                }
+            } catch(err) {
+                window.showToast('네트워크 오류로 삭제하지 못했습니다.', 'error');
             }
         };
     }

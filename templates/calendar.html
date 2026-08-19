@@ -19,9 +19,6 @@
     
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
-
-    #toast-popup { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: #fff; padding: 12px 24px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.3s; z-index: 10000; font-weight: 700; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-    #toast-popup.show { opacity: 1; }
 </style>
 
 {% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
@@ -46,8 +43,6 @@
     <div id="daily-tx-list"></div>
 </div>
 
-<div id="toast-popup">내역이 처리되었습니다.</div>
-
 <button class="fab no-spa" onclick="window.openAddSheet()">+</button>
 
 <div id="bottom-sheet-overlay" onclick="window.closeBottomSheet()"></div>
@@ -68,13 +63,15 @@
             <div class="input-wrapper"><input type="text" inputmode="numeric" id="cal_amount_input" name="amount" class="input-field" placeholder="금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
         
+        <div id="cal-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
+            {% for u in ledger.users %}
+            <button type="button" class="btn-tab {% if u.id == current_user.id %}active{% endif %}" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
+            {% endfor %}
+            <button type="button" class="btn-tab" data-value="함께" onclick="window.setTransactor(this)">함께</button>
+            <input type="hidden" name="transactor" value="{{ current_user.nickname }}">
+        </div>
+
         <div class="flex-row">
-            <div class="input-wrapper" style="flex: 0 0 100px;">
-                <select name="transactor" id="cal_transactor_select" required class="input-field">
-                    {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if u.id == current_user.id %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
-                    <option value="함께">함께</option>
-                </select>
-            </div>
             <div class="input-wrapper"><input type="text" id="cal_title_input" name="title" class="input-field" placeholder="제목" required></div>
         </div>
         
@@ -411,11 +408,38 @@
             let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
             select.innerHTML = selectHtml; select.value = val;
         };
-        window.addCat = async function() { const name = document.getElementById('new_cat_name').value; if (!name) return; await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); document.getElementById('new_cat_name').value = ''; window.loadCategories(); };
+        window.addCat = async function() {
+            const name = document.getElementById('new_cat_name').value; if (!name) return;
+            try {
+                const res = await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
+                if (!res.ok) throw new Error();
+                document.getElementById('new_cat_name').value = ''; window.loadCategories();
+            } catch(err) { window.showToast('분류 추가에 실패했습니다.', 'error'); }
+        };
         window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
-        window.saveCat = async function(id) { const name = document.getElementById(`cat-name-${id}`).value; await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})}); window.loadCategories(); };
-        window.deleteCat = async function(id) { if (!confirm('삭제하시겠습니까?')) return; await fetch(`/api/category/${id}/delete`, { method: 'POST' }); window.loadCategories(); };
-        window.moveCat = async function(id, dir) { await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})}); window.loadCategories(); };
+        window.saveCat = async function(id) {
+            const name = document.getElementById(`cat-name-${id}`).value;
+            try {
+                const res = await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 수정에 실패했습니다.', 'error'); }
+        };
+        window.deleteCat = async function(id) {
+            if (!confirm('삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/category/${id}/delete`, { method: 'POST' });
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 삭제에 실패했습니다.', 'error'); }
+        };
+        window.moveCat = async function(id, dir) {
+            try {
+                const res = await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})});
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('분류 순서 변경에 실패했습니다.', 'error'); }
+        };
 
         window.openAddSheet = function() {
             document.getElementById('sheet-title').innerText = '새 내역 등록';
@@ -437,7 +461,7 @@
             
             window.setCalTxType(tx.tx_type);
             document.getElementById('cal_amount_input').value = tx.amount.toLocaleString();
-            document.getElementById('cal_transactor_select').value = tx.transactor;
+            window.syncTransactorGroup(document.getElementById('cal-transactor-group'), tx.transactor);
             document.getElementById('cal_title_input').value = tx.title;
             document.getElementById('cal_category_select').value = tx.category_id || document.querySelector('#cal_category_select option').value;
             document.getElementById('cal_date_input').value = tx.date;
@@ -457,32 +481,46 @@
 
         document.getElementById('cal-tx-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            const btn = e.target.querySelector('button[type="submit"]');
+            if (btn.disabled) return;
+            btn.disabled = true;
             const fd = new FormData(e.target); fd.append('ajax', '1');
             try {
                 const res = await fetch(e.target.action, { method: 'POST', body: fd });
                 if (res.ok) {
                     window.closeBottomSheet();
-                    const t = document.getElementById('toast-popup'); 
-                    t.innerText = "처리 완료되었습니다."; t.classList.add('show'); 
-                    setTimeout(() => t.classList.remove('show'), 3000);
-                    
+                    window.showToast('처리 완료되었습니다.', 'success');
+
                     window.allMonthsData = {};
                     let data = await window.fetchMonthData(window.currentY, window.currentM);
                     document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
                     window.selectDate(window.selectedDate);
+                } else {
+                    window.showToast('처리에 실패했습니다. 다시 시도해주세요.', 'error');
                 }
-            } catch(e) { /* 에러 모달이 공통으로 처리해줌 */ }
+            } catch(e) {
+                window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         window.deleteTx = async function(id) {
             if(!confirm('정말 삭제하시겠습니까?')) return;
-            let fd = new FormData(); fd.append('ajax', '1');
-            let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
-            if(res.ok) {
-                window.allMonthsData = {};
-                let data = await window.fetchMonthData(window.currentY, window.currentM);
-                document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                window.selectDate(window.selectedDate);
+            try {
+                let fd = new FormData(); fd.append('ajax', '1');
+                let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
+                if(res.ok) {
+                    window.showToast('삭제되었습니다.', 'success');
+                    window.allMonthsData = {};
+                    let data = await window.fetchMonthData(window.currentY, window.currentM);
+                    document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
+                    window.selectDate(window.selectedDate);
+                } else {
+                    window.showToast('삭제에 실패했습니다. 다시 시도해주세요.', 'error');
+                }
+            } catch(err) {
+                window.showToast('네트워크 오류로 삭제하지 못했습니다.', 'error');
             }
         };
     }

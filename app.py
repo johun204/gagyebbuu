@@ -26,12 +26,14 @@ from blueprints.home import home_bp
 from blueprints.calendar_routes import calendar_bp
 from blueprints.transactions import transactions_bp
 from blueprints.settings import settings_bp
+from blueprints.push import push_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(home_bp)
 app.register_blueprint(calendar_bp)
 app.register_blueprint(transactions_bp)
 app.register_blueprint(settings_bp)
+app.register_blueprint(push_bp)
 
 @app.route('/sw.js')
 def serve_sw():

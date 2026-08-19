@@ -31,6 +31,34 @@ self.addEventListener('activate', event => {
     self.clients.claim();
 });
 
+self.addEventListener('push', event => {
+    let data = { title: '가계쀼', body: '' };
+    try { data = event.data.json(); } catch (e) {
+        if (event.data) data.body = event.data.text();
+    }
+    event.waitUntil(
+        self.registration.showNotification(data.title || '가계쀼', {
+            body: data.body || '',
+            icon: '/static/icon-192.png',
+            badge: '/static/icon-192.png',
+            data: { url: data.url || '/home' }
+        })
+    );
+});
+
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const url = (event.notification.data && event.notification.data.url) || '/home';
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+            for (const client of clientList) {
+                if ('focus' in client) return client.focus();
+            }
+            if (clients.openWindow) return clients.openWindow(url);
+        })
+    );
+});
+
 self.addEventListener('fetch', event => {
     if (event.request.method !== 'GET') return;
     

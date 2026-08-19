@@ -23,13 +23,15 @@
             <div class="input-wrapper"><input type="text" inputmode="numeric" name="amount" class="input-field" value="{{ '{:,}'.format(tx.amount) if tx.amount else '' }}" oninput="window.formatNumber(this)" required></div>
         </div>
 
+        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+            {% for u in ledger.users %}
+            <button type="button" class="btn-tab {% if tx.transactor == u.nickname %}active{% endif %}" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
+            {% endfor %}
+            <button type="button" class="btn-tab {% if tx.transactor == '함께' %}active{% endif %}" data-value="함께" onclick="window.setTransactor(this)">함께</button>
+            <input type="hidden" name="transactor" value="{{ tx.transactor }}">
+        </div>
+
         <div class="flex-row">
-            <div class="input-wrapper" style="flex: 0 0 120px;">
-                <select name="transactor" required class="input-field">
-                    {% for u in ledger.users %}<option value="{{ u.nickname }}" {% if tx.transactor == u.nickname %}selected{% endif %}>{{ u.nickname }}</option>{% endfor %}
-                    <option value="함께" {% if tx.transactor == '함께' %}selected{% endif %}>함께</option>
-                </select>
-            </div>
             <div class="input-wrapper"><input type="text" name="title" class="input-field" value="{{ tx.title }}" placeholder="제목" required></div>
         </div>
         

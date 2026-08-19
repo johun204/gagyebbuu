@@ -44,8 +44,9 @@ def build_home_data(user_id, y, m):
             payer_expense[tx.transactor] = payer_expense.get(tx.transactor, 0) + tx.amount
 
     theme_colors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84']
+    # 최근 거래자 순서가 아니라 이름순으로 고정 배정해야 매번 접속할 때 색이 바뀌지 않는다
     payer_color_map = {}
-    for i, t in enumerate(payer_expense.keys()):
+    for i, t in enumerate(sorted(payer_expense.keys())):
         payer_color_map[t] = theme_colors[(i + 4) % len(theme_colors)]
 
     budget_status = []

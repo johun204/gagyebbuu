@@ -4,6 +4,7 @@ from sqlalchemy.orm import joinedload
 
 from models import db, User, Ledger, Category, Transaction
 from helpers import spa_redirect, get_target_date, get_or_create_uncategorized, month_range
+from blueprints.push import notify_partner
 
 transactions_bp = Blueprint('transactions', __name__)
 
@@ -108,6 +109,9 @@ def add_transaction():
     db.session.add(new_tx)
     db.session.commit()
 
+    notify_partner(user.ledger_id, user.id, '가계쀼',
+                    f"{transactor}님이 '{title}' {amount:,}원을 등록했어요")
+
     if request.form.get('ajax') == '1':
         return jsonify({'success': True})
 
@@ -139,6 +143,9 @@ def edit_transaction(tx_id):
         tx.datetime_val = datetime.strptime(f"{request.form.get('date')} {request.form.get('time')}", "%Y-%m-%d %H:%M")
         db.session.commit()
 
+        notify_partner(user.ledger_id, user.id, '가계쀼',
+                        f"{tx.transactor}님이 '{tx.title}' 내역을 수정했어요")
+
         if request.form.get('ajax') == '1':
             return jsonify({'success': True})
 
@@ -155,8 +162,11 @@ def delete_transaction(tx_id):
     user = User.query.get(request.user_id)
     tx = Transaction.query.filter_by(id=tx_id, ledger_id=user.ledger_id).first()
     if tx:
+        transactor, title = tx.transactor, tx.title
         db.session.delete(tx)
         db.session.commit()
+        notify_partner(user.ledger_id, user.id, '가계쀼',
+                        f"{transactor}님이 '{title}' 내역을 삭제했어요")
 
     if request.form.get('ajax') == '1' or request.headers.get('Accept') == 'application/json':
         return jsonify({'success': True})

@@ -29,7 +29,7 @@
 
 {% if error %}
 <script>
-    alert('{{ error }}');
+    window.showToast('{{ error }}', 'error');
 </script>
 {% endif %}
 

@@ -189,9 +189,13 @@
             if(window.appCharts && window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
             
             const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
-            const activeCats = Object.keys(data.cat_expense_total).filter(k => data.cat_expense_total[k] > 0);
+            // 색상은 카테고리의 고정 순서(sort_order) 기준 인덱스로 배정한다.
+            // 그 달에 지출이 없는 카테고리는 필터링되지만, 색 인덱스는 전체 목록 기준 위치를 그대로 쓰기 때문에
+            // 활성 카테고리 구성이 달마다 달라져도 같은 카테고리는 항상 같은 색을 유지한다.
+            const allCatNames = Object.keys(data.cat_expense_total);
+            const activeCats = allCatNames.filter(k => data.cat_expense_total[k] > 0);
             const catDataArr = activeCats.map(k => data.cat_expense_total[k]);
-            const catColors = activeCats.map((_, i) => themeColors[i % themeColors.length]);
+            const catColors = activeCats.map(k => themeColors[allCatNames.indexOf(k) % themeColors.length]);
             
             const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
             const datasets = activeCats.map((cat, i) => { return { label: cat, data: data.dow_expense_by_cat[cat], backgroundColor: catColors[i] }; });

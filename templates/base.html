@@ -133,10 +133,60 @@
         .slide-inner { overflow: hidden; }
         .arrow-icon { display: inline-block; transition: transform 0.3s ease; }
         .arrow-icon.open { transform: rotate(180deg); }
+
+        .toast-container { position: fixed; top: calc(env(safe-area-inset-top) + 16px); left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 8px; align-items: center; width: 90%; max-width: 400px; pointer-events: none; }
+        .toast { background: var(--color-foreground); color: #fff; padding: 12px 20px; border-radius: var(--radius-action); font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(-12px); transition: opacity .25s ease, transform .25s ease; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.toast-success { background: var(--color-action); }
+        .toast.toast-error { background: #fe493d; }
     </style>
 </head>
 <body>
     <div id="nprogress"></div>
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- 화면 콘텐츠(#app-content)가 파싱되면서 곧바로 실행되는 인라인 스크립트가 있어서
+         (예: calendar.html의 초기 selectDate 호출), 여기서 쓰는 공용 함수는
+         #app-content보다 먼저 정의되어야 한다. 나머지 앱 셸 스크립트는 아래쪽에 남겨둔다. -->
+    <script>
+        window.getDowStr = function(dateStr) {
+            const days = ['일','월','화','수','목','금','토'];
+            const d = new Date(dateStr + 'T00:00:00');
+            return `${dateStr} (${days[d.getDay()]})`;
+        };
+
+        window.formatNumber = function(input) {
+            if (!input) return;
+            let val = input.value.replace(/[^0-9]/g, '');
+            input.value = val === '' ? '' : parseInt(val, 10).toLocaleString();
+        };
+
+        window.showToast = function(message, type) {
+            const container = document.getElementById('toast-container');
+            if (!container || !message) return;
+            const toast = document.createElement('div');
+            toast.className = 'toast' + (type === 'error' ? ' toast-error' : type === 'success' ? ' toast-success' : '');
+            toast.textContent = message;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 250);
+            }, 2500);
+        };
+
+        window.syncTransactorGroup = function(group, value) {
+            if (!group) return;
+            group.querySelectorAll('.btn-tab').forEach(b => b.classList.toggle('active', b.dataset.value === value));
+            const hidden = group.querySelector('input[type="hidden"][name="transactor"]');
+            if (hidden) hidden.value = value;
+        };
+
+        window.setTransactor = function(btn) {
+            window.syncTransactorGroup(btn.parentElement, btn.dataset.value);
+        };
+    </script>
+
     <main id="app-content">{% block content %}{% endblock %}</main>
 
     <div id="nav-container">
@@ -173,18 +223,6 @@
     </dialog>
 
     <script>
-        window.formatNumber = function(input) {
-            if (!input) return;
-            let val = input.value.replace(/[^0-9]/g, '');
-            input.value = val === '' ? '' : parseInt(val, 10).toLocaleString();
-        };
-
-        window.getDowStr = function(dateStr) {
-            const days = ['일','월','화','수','목','금','토'];
-            const d = new Date(dateStr + 'T00:00:00');
-            return `${dateStr} (${days[d.getDay()]})`;
-        };
-
         window.openMonthPicker = function(currentY, currentM) {
             let mStr = currentM.toString().padStart(2, '0');
             document.getElementById('global_month_input').value = `${currentY}-${mStr}`;
