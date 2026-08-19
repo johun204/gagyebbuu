@@ -16,6 +16,9 @@ app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
 
 app.config['SQLALCHEMY_DATABASE_URI'] = config.get_database_uri()
+# 서버리스 함수가 재사용될 때 Neon 쪽에서 이미 끊긴 커넥션을 그대로 쓰다가
+# "SSL connection has been closed unexpectedly" 로 죽는 문제 방지 (사용 전 핑 체크 후 재연결)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 db.init_app(app)
 
 with app.app_context():
