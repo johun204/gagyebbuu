@@ -5,7 +5,6 @@ const STATIC_URLS = [
     '/calendar',
     '/transactions',
     '/settings',
-    '/search',
     '/static/manifest.json',
     '/static/icon-192.png',
     '/static/icon-512.png',

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <style>
-    input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
+    input[type="date"], input[type="time"], input[type="text"], input[type="number"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
     .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
 
     .date-divider { font-size: 14px; font-weight: 700; color: var(--color-secondary); margin: 24px 0 8px 0; border-bottom: 2px solid var(--color-line); padding-bottom: 4px; }
@@ -10,99 +10,73 @@
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
 
+    .fab { position: fixed; bottom: 84px; right: 20px; width: 56px; height: 56px; border-radius: 28px; background: var(--color-action); color: #fff; font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(6, 169, 108, 0.4); z-index: 999; cursor: pointer; border: none; text-decoration: none; }
+
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
     #edit-bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
     #edit-bottom-sheet.active { transform: translateY(0); }
-
-    #tx-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
-    #tx-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
-    .tx-slide { width: 33.333%; flex-shrink: 0; box-sizing: border-box; }
 </style>
 
 {% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
 
-<div class="month-selector">
-    <a href="javascript:void(0)" onclick="window.shiftTxMonth(-1)" class="no-spa">◀</a> 
-    <h3 id="tx-month-header" onclick="window.openMonthPicker(window.currentTxY || {{ t_year }}, window.currentTxM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월 내역</h3>
-    <a href="javascript:void(0)" onclick="window.shiftTxMonth(1)" class="no-spa">▶</a>
-</div>
+<h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">내역 검색</h2>
 
 <div class="card" style="margin-bottom: 8px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3>
-        <a href="/search" class="chip no-spa" style="text-decoration: none;">🔍 내역 검색</a>
-    </div>
-    
-    <form id="tx-add-form" action="/transaction" method="POST">
-        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-            <button type="button" id="btn-expense" class="btn-tab active" onclick="window.setTxType('지출')">지출</button>
-            <button type="button" id="btn-income" class="btn-tab" onclick="window.setTxType('수입')">수입</button>
-            <input type="hidden" name="tx_type" id="tx_type" value="지출">
+    <form id="search-form">
+        <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <button type="button" id="search-btn-all" class="btn-tab active" onclick="window.setSearchTxType('')">전체</button>
+            <button type="button" id="search-btn-expense" class="btn-tab" onclick="window.setSearchTxType('지출')">지출</button>
+            <button type="button" id="search-btn-income" class="btn-tab" onclick="window.setSearchTxType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="search_tx_type" value="">
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" inputmode="numeric" id="amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
-        </div>
-        
-        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-            {% for u in ledger.users %}
-            <button type="button" class="btn-tab {% if u.id == current_user.id %}active{% endif %}" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
-            {% endfor %}
-            <button type="button" class="btn-tab" data-value="함께" onclick="window.setTransactor(this)">함께</button>
-            <input type="hidden" name="transactor" value="{{ current_user.nickname }}">
+            <div class="input-wrapper"><input type="text" name="keyword" id="search_keyword" class="input-field" placeholder="검색어 (제목, 메모)"></div>
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" id="title_input" name="title" class="input-field" placeholder="제목 (예: 스타벅스)" required></div>
+            <div class="input-wrapper"><input type="date" name="start_date" id="search_start_date" class="input-field" value="{{ default_start }}"></div>
+            <span style="color: var(--color-muted);">~</span>
+            <div class="input-wrapper"><input type="date" name="end_date" id="search_end_date" class="input-field" value="{{ default_end }}"></div>
         </div>
-        
+
+        <div class="flex-row">
+            <div class="input-wrapper"><input type="number" name="min_amount" id="search_min_amount" class="input-field" placeholder="최소 금액(원)"></div>
+            <span style="color: var(--color-muted);">~</span>
+            <div class="input-wrapper"><input type="number" name="max_amount" id="search_max_amount" class="input-field" placeholder="최대 금액(원)"></div>
+        </div>
+
         <div class="flex-row">
             <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <select name="category_id" id="category_select" class="input-field" style="flex: 1;">
-                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
-                    {% for cat in categories if cat.name != '미분류' %}
-                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                    {% endfor %}
+                <select name="category_id" id="search_category_select" class="input-field" style="flex: 1;">
+                    <option value="">전체 분류</option>
+                    {% for cat in categories %}<option value="{{ cat.id }}">{{ cat.name }}</option>{% endfor %}
                 </select>
                 <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
         </div>
-        
-        <div class="flex-row">
-            <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <input type="date" name="date" class="input-field" value="{{ now.strftime('%Y-%m-%d') }}" required style="flex: 1;">
-                <input type="hidden" name="time" id="tx_time" value="{{ now.strftime('%H:%M') }}">
-                <button type="button" class="chip" onclick="document.getElementById('time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
-            </div>
+
+        <div class="flex-row" style="margin-bottom: 0;">
+            <button type="submit" class="btn-action" style="flex: 1;">검색</button>
+            <button type="button" class="chip" style="padding: 12px 16px;" onclick="window.resetSearch()">초기화</button>
         </div>
-        
-        <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" id="memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
-        </div>
-        
-        <div class="flex-row" style="margin-bottom: 16px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
-                <input type="checkbox" id="exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
-            </label>
-        </div>
-        
-        <button type="submit" class="btn-action" style="width: 100%;">등록하기</button>
     </form>
 </div>
 
-<div id="tx-slider-wrapper">
-    <div id="tx-slider">
-        <div id="slide-tx-prev" class="tx-slide"></div>
-        <div id="slide-tx-curr" class="tx-slide"></div>
-        <div id="slide-tx-next" class="tx-slide"></div>
-    </div>
+<h3 id="results-count" style="font-size: 16px; font-weight: 700; margin: 24px 0 4px;">검색 결과</h3>
+<div id="tx-results"></div>
+<div id="load-more-wrap" style="text-align: center; padding: 20px;">
+    <button type="button" class="chip" onclick="window.loadMoreResults(false)" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
+    <div id="loading-text" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
 </div>
+
+<button class="fab no-spa" onclick="window.openAddSheet()">+</button>
 
 <div id="edit-sheet-overlay" onclick="window.closeEditSheet()"></div>
 <div id="edit-bottom-sheet">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700;">내역 수정</h3>
+        <h3 id="sheet-title" style="font-size: 18px; font-weight: 700;">내역 등록</h3>
         <button type="button" class="chip" onclick="window.closeEditSheet()" style="background: none; color: var(--color-muted); font-size: 18px; padding: 0;">✕</button>
     </div>
 
@@ -116,7 +90,7 @@
         <div class="flex-row">
             <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" oninput="window.formatNumber(this)" required></div>
         </div>
-        
+
         <div id="edit-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
             {% for u in ledger.users %}
             <button type="button" class="btn-tab" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
@@ -128,7 +102,7 @@
         <div class="flex-row">
             <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" required></div>
         </div>
-        
+
         <div class="flex-row">
             <div class="input-wrapper">
                 <select name="category_id" id="edit_category_select" class="input-field">
@@ -142,37 +116,26 @@
                 <input type="date" name="date" id="edit_date_input" class="input-field" required style="width: 100%;">
             </div>
         </div>
-        
+
         <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field"></div>
+            <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
             <input type="hidden" name="time" id="edit_time_input">
             <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
         </div>
-        
+
         <div class="flex-row" style="margin-bottom: 16px;">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
                 <input type="checkbox" id="edit_exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출 분석에서 제외하기
             </label>
         </div>
-        
-        <button type="submit" class="btn-action" style="width: 100%;">수정 완료</button>
+
+        <button type="submit" class="btn-action" style="width: 100%;">저장하기</button>
     </form>
 </div>
 
-<dialog id="time-dialog">
-    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
-        <button type="button" class="chip" onclick="document.getElementById('time-dialog').close()" style="background:none;">닫기</button>
-    </div>
-    <div class="flex-row">
-        <div class="input-wrapper"><input type="time" id="time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
-    </div>
-    <button type="button" class="btn-action" style="width:100%;" onclick="window.setTime()">확인</button>
-</dialog>
-
 <dialog id="time-dialog-edit">
     <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700;">시간 변경</h3>
+        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
         <button type="button" class="chip" onclick="document.getElementById('time-dialog-edit').close()" style="background:none;">닫기</button>
     </div>
     <div class="flex-row">
@@ -194,287 +157,157 @@
 </dialog>
 
 <script>
-    window.currentTxY = {{ t_year }};
-    window.currentTxM = {{ t_month }};
+    window.defaultStart = "{{ default_start }}";
+    window.defaultEnd = "{{ default_end }}";
+    window.currentUserNickname = "{{ current_user.nickname }}";
 </script>
 
 <script>
     {
-        // 원본과 동일하게 2번 로딩되지만, 덮어쓰기 로직으로 부드럽게 복원되도록 처리
         window.txDataStore = window.txDataStore || {};
-        window.allTxPagesData = window.allTxPagesData || {};
+        window.searchState = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '' };
 
-        window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
-        window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
+        window.renderTxItem = function(tx) {
+            const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
+            const sign = tx.tx_type === '수입' ? '+' : '-';
+            const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
+            const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
 
-        // 스켈레톤 초기화 시, 이전 화면의 찌꺼기(캐시)가 있다면 그대로 박아둠 (깜빡임 차단)
-        window.renderTxSlide = function(uid) {
-            let cached = window.allTxPagesData[uid] ? window.allTxPagesData[uid].cachedHtml : '';
             return `
-                <div id="tx-container-${uid}">${cached || ''}</div>
-                <div id="load-more-${uid}" style="text-align: center; padding: 20px;">
-                    <button type="button" class="chip" onclick="window.loadMoreTxs('${uid}')" style="padding: 10px 24px; font-size: 14px; cursor: pointer; display: none;">더보기</button>
-                    <div id="loading-text-${uid}" style="display: none; color: var(--color-muted); font-size: 14px;">모든 내역을 불러왔습니다.</div>
-                </div>
-            `;
+                <div class="tx-item" style="border-left: 4px solid ${color};">
+                    <div style="flex: 1;">
+                        <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
+                        <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}</div>${memoHtml}
+                    </div>
+                    <div style="text-align: right; margin-left: 12px; min-width: 80px;">
+                        <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
+                        <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
+                            <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
+                            <span style="color: var(--color-line);">|</span>
+                            <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
+                        </div>
+                    </div>
+                </div>`;
         };
 
-        const currUid = `${window.currentTxY}_${window.currentTxM}`;
-        const pDate = window.getPrevMonth(window.currentTxY, window.currentTxM);
-        const nDate = window.getNextMonth(window.currentTxY, window.currentTxM);
-        const prevUid = `${pDate.y}_${pDate.m}`;
-        const nextUid = `${nDate.y}_${nDate.m}`;
+        window.buildSearchQuery = function(page) {
+            const fd = new FormData(document.getElementById('search-form'));
+            const params = new URLSearchParams();
+            for (const [k, v] of fd.entries()) { if (v) params.set(k, v); }
+            params.set('page', page);
+            return params.toString();
+        };
 
-        // SWR 환경에서 스크립트 재실행 시 1페이지부터 다시 무조건 로딩하도록 강제 리셋 (캐시 껍데기는 유지)
-        if (window.allTxPagesData[currUid]) window.allTxPagesData[currUid].page = 1;
-        else window.allTxPagesData[currUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-
-        if (window.allTxPagesData[prevUid]) window.allTxPagesData[prevUid].page = 1;
-        else window.allTxPagesData[prevUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-
-        if (window.allTxPagesData[nextUid]) window.allTxPagesData[nextUid].page = 1;
-        else window.allTxPagesData[nextUid] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-
-        document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(currUid);
-        document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(prevUid);
-        document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nextUid);
-
-        window.loadMoreTxs = async function(uid, overridePage) {
-            let [y, m] = uid.split('_');
-            let s = window.allTxPagesData[uid];
-            if (overridePage) s.page = overridePage;
-
+        window.loadMoreResults = async function(reset) {
+            const resultsEl = document.getElementById('tx-results');
+            if (reset) {
+                window.searchState = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '' };
+                resultsEl.innerHTML = '';
+                document.getElementById('load-more-wrap').style.display = '';
+            }
+            const s = window.searchState;
             if (s.isLoading || !s.hasNext) return;
             s.isLoading = true;
-            
-            const btn = document.querySelector(`#load-more-${uid} button`);
-            const txt = document.getElementById(`loading-text-${uid}`);
-            if(btn) { btn.innerText = '불러오는 중...'; btn.style.display = 'inline-block'; }
-            if(txt) txt.style.display = 'none';
+
+            const btn = document.querySelector('#load-more-wrap button');
+            const txt = document.getElementById('loading-text');
+            if (btn) { btn.innerText = '불러오는 중...'; btn.style.display = 'inline-block'; }
+            if (txt) txt.style.display = 'none';
 
             try {
-                const res = await fetch(`/api/transactions?year=${y}&month=${m}&page=${s.page}`);
+                const res = await fetch(`/api/transactions?${window.buildSearchQuery(s.page)}`);
                 const data = await res.json();
-                
-                const container = document.getElementById(`tx-container-${uid}`);
-                if (!container) { s.isLoading = false; return; }
-                
-                let htmlBuffer = '';
-                if (s.page === 1) s.lastRenderedDate = '';
 
+                const isFirstPage = s.page === 1;
+                if (isFirstPage) {
+                    document.getElementById('results-count').innerText = `검색 결과 (${data.total_count}건)`;
+                }
+
+                let htmlBuffer = '';
                 data.transactions.forEach(tx => {
                     window.txDataStore[tx.id] = tx;
                     if (tx.date !== s.lastRenderedDate) {
                         htmlBuffer += `<div class="date-divider">${window.getDowStr(tx.date)}</div>`;
                         s.lastRenderedDate = tx.date;
                     }
-                    const color = tx.tx_type === '수입' ? 'var(--color-primary)' : '#fe493d';
-                    const sign = tx.tx_type === '수입' ? '+' : '-';
-                    const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
-                    const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
-
-                    htmlBuffer += `
-                        <div class="tx-item" style="border-left: 4px solid ${color};">
-                            <div style="flex: 1;">
-                                <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px;">🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
-                                <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}</div>${memoHtml}
-                            </div>
-                            <div style="text-align: right; margin-left: 12px; min-width: 80px;">
-                                <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
-                                <div style="margin-top: 8px; display: flex; gap: 8px; justify-content: flex-end; align-items: center;">
-                                    <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">수정</button>
-                                    <span style="color: var(--color-line);">|</span>
-                                    <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color: var(--color-muted); font-size: 12px; cursor: pointer; padding: 0;">삭제</button>
-                                </div>
-                            </div>
-                        </div>`;
+                    htmlBuffer += window.renderTxItem(tx);
                 });
-                
+
                 s.hasNext = data.has_next;
                 s.page++;
                 s.isLoading = false;
 
-                // [핵심] 첫 페이지 데이터면 무자비하게 덮어쓰기, 아니면 이어붙이기 (로딩 전 비우기 없음!)
-                if (s.page === 2) {
-                    container.innerHTML = htmlBuffer;
-                } else {
-                    container.innerHTML += htmlBuffer;
-                }
-                
-                s.cachedHtml = container.innerHTML;
+                resultsEl.innerHTML += htmlBuffer;
 
-                const newBtn = document.querySelector(`#load-more-${uid} button`);
-                const newTxt = document.getElementById(`loading-text-${uid}`);
-                
+                const newBtn = document.querySelector('#load-more-wrap button');
+                const newTxt = document.getElementById('loading-text');
+
                 if (s.hasNext) {
-                    if(newBtn) { newBtn.innerText = '더보기'; newBtn.style.display = 'inline-block'; }
+                    if (newBtn) { newBtn.innerText = '더보기'; newBtn.style.display = 'inline-block'; }
                 } else {
-                    if(newBtn) newBtn.style.display = 'none';
-                    if (s.page > 2 || data.transactions.length > 0) {
-                        if(newTxt) newTxt.style.display = 'block';
-                    } else {
-                        container.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--color-muted);">해당 월의 내역이 없습니다.</div>`;
-                        s.cachedHtml = container.innerHTML;
+                    if (newBtn) newBtn.style.display = 'none';
+                    if (isFirstPage && data.transactions.length === 0) {
+                        resultsEl.innerHTML = `<div style="text-align:center; padding: 40px 0; color: var(--color-muted);">검색 조건에 맞는 내역이 없습니다.</div>`;
+                    } else if (newTxt) {
+                        newTxt.style.display = 'block';
                     }
                 }
+                window.refreshResultsObserver();
             } catch(e) { s.isLoading = false; }
         };
 
-        window.loadMoreTxs(currUid);
-        window.loadMoreTxs(prevUid);
-        window.loadMoreTxs(nextUid);
-
-        if(window.txObserver) window.txObserver.disconnect();
-        window.txObserver = new IntersectionObserver((entries) => { 
-            entries.forEach(e => {
-                if (e.isIntersecting) {
-                    let uid = e.target.id.replace('load-more-', '');
-                    window.loadMoreTxs(uid);
-                }
-            });
+        if (window.txResultsObserver) window.txResultsObserver.disconnect();
+        window.txResultsObserver = new IntersectionObserver((entries) => {
+            entries.forEach(e => { if (e.isIntersecting) window.loadMoreResults(false); });
         }, { rootMargin: '200px' });
-        
-        window.refreshTxObservers = function() {
-            window.txObserver.disconnect();
-            const target = document.getElementById(`load-more-${currUid}`);
-            if(target) window.txObserver.observe(target);
-        };
-        setTimeout(window.refreshTxObservers, 500);
 
-        window.shiftTxMonth = async function(dir) {
-            let slider = document.getElementById('tx-slider');
-            if(!slider) return;
-            slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
-            slider.style.transform = dir === 1 ? `translateX(-66.666%)` : `translateX(0%)`;
-            
-            if (dir === 1) {
-                let n = window.getNextMonth(window.currentTxY, window.currentTxM);
-                window.currentTxY = n.y; window.currentTxM = n.m;
-            } else {
-                let p = window.getPrevMonth(window.currentTxY, window.currentTxM);
-                window.currentTxY = p.y; window.currentTxM = p.m;
-            }
-            
-            const header = document.getElementById('tx-month-header');
-            if(header) header.innerText = `${window.currentTxY}년 ${window.currentTxM}월 내역`;
-            
-            setTimeout(async () => {
-                slider.style.transition = 'none';
-                slider.style.transform = `translateX(-33.333%)`;
-                
-                let cId = `${window.currentTxY}_${window.currentTxM}`;
-                let pDate = window.getPrevMonth(window.currentTxY, window.currentTxM);
-                let nDate = window.getNextMonth(window.currentTxY, window.currentTxM);
-                let pId = `${pDate.y}_${pDate.m}`;
-                let nId = `${nDate.y}_${nDate.m}`;
-
-                // 슬라이더 이동 시 기존 캐시 초기화 대신 1페이지부터 백그라운드 무조건 갱신 명령 세팅
-                if (!window.allTxPagesData[cId]) window.allTxPagesData[cId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-                else window.allTxPagesData[cId].page = 1;
-
-                if (!window.allTxPagesData[pId]) window.allTxPagesData[pId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-                else window.allTxPagesData[pId].page = 1;
-
-                if (!window.allTxPagesData[nId]) window.allTxPagesData[nId] = { page: 1, hasNext: true, isLoading: false, lastRenderedDate: '', cachedHtml: '' };
-                else window.allTxPagesData[nId].page = 1;
-
-                document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cId);
-                document.getElementById('slide-tx-prev').innerHTML = window.renderTxSlide(pId);
-                document.getElementById('slide-tx-next').innerHTML = window.renderTxSlide(nId);
-                
-                window.loadMoreTxs(cId);
-                window.loadMoreTxs(pId);
-                window.loadMoreTxs(nId);
-                
-                window.txObserver.disconnect();
-                setTimeout(() => {
-                    const target = document.getElementById(`load-more-${cId}`);
-                    if(target) window.txObserver.observe(target);
-                }, 500);
-                
-                window.history.replaceState(null, '', `/transactions?year=${window.currentTxY}&month=${window.currentTxM}`);
-            }, 300);
+        window.refreshResultsObserver = function() {
+            window.txResultsObserver.disconnect();
+            const target = document.getElementById('load-more-wrap');
+            if (target) window.txResultsObserver.observe(target);
         };
 
-        const view = document.getElementById('tx-slider-wrapper');
-        if(view) {
-            let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
-            
-            view.addEventListener('touchstart', e => {
-                startX = e.touches[0].clientX;
-                startY = e.touches[0].clientY;
-                isSwiping = true;
-                isScrolling = false;
-                diffX = 0;
-                document.getElementById('tx-slider').style.transition = 'none';
-            }, {passive: true});
-            
-            view.addEventListener('touchmove', e => {
-                if(!isSwiping) return;
-                let currentX = e.touches[0].clientX;
-                let currentY = e.touches[0].clientY;
-                diffX = currentX - startX;
-                let diffY = currentY - startY;
-                
-                if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
-                    isScrolling = true;
-                }
-                if (isScrolling) {
-                    isSwiping = false;
-                    return;
-                }
-                
-                let cw = view.offsetWidth;
-                let percent = (diffX / cw) * 33.333;
-                document.getElementById('tx-slider').style.transform = `translateX(${-33.333 + percent}%)`;
-            }, {passive: true});
-            
-            view.addEventListener('touchend', e => {
-                if(!isSwiping) return;
-                isSwiping = false;
-                if (diffX < -60) window.shiftTxMonth(1);
-                else if (diffX > 60) window.shiftTxMonth(-1);
-                else {
-                    document.getElementById('tx-slider').style.transition = 'transform 0.3s ease';
-                    document.getElementById('tx-slider').style.transform = 'translateX(-33.333%)';
-                }
-            });
-        }
-
-        // 안전하게 요소들을 직접 제어
-        window.setTxType = function(type) {
-            document.getElementById('tx_type').value = type;
-            if (type === '지출') {
-                document.getElementById('btn-expense').classList.add('active');
-                document.getElementById('btn-income').classList.remove('active');
-                document.getElementById('amount_input').placeholder = '지출 금액(원)';
-            } else {
-                document.getElementById('btn-income').classList.add('active');
-                document.getElementById('btn-expense').classList.remove('active');
-                document.getElementById('amount_input').placeholder = '수입 금액(원)';
-            }
+        window.setSearchTxType = function(type) {
+            document.getElementById('search_tx_type').value = type;
+            document.querySelectorAll('#search-btn-all, #search-btn-expense, #search-btn-income').forEach(b => b.classList.remove('active'));
+            if (type === '지출') document.getElementById('search-btn-expense').classList.add('active');
+            else if (type === '수입') document.getElementById('search-btn-income').classList.add('active');
+            else document.getElementById('search-btn-all').classList.add('active');
+            window.loadMoreResults(true);
         };
 
-        window.setTime = function() {
-            document.getElementById('tx_time').value = document.getElementById('time_picker_input').value;
-            document.getElementById('time-dialog').close();
+        window.resetSearch = function() {
+            document.getElementById('search_keyword').value = '';
+            document.getElementById('search_start_date').value = window.defaultStart;
+            document.getElementById('search_end_date').value = window.defaultEnd;
+            document.getElementById('search_min_amount').value = '';
+            document.getElementById('search_max_amount').value = '';
+            document.getElementById('search_category_select').value = '';
+            window.setSearchTxType('');
         };
-        
+
+        document.getElementById('search-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            window.loadMoreResults(true);
+        });
+
+        window.loadMoreResults(true);
+
         window.setTimeEdit = function() {
             document.getElementById('edit_time_input').value = document.getElementById('time_picker_input_edit').value;
             document.getElementById('time-dialog-edit').close();
         };
 
-        window.openCatModal = function() { 
-            document.getElementById('cat-dialog').showModal(); window.loadCategories(); 
+        window.openCatModal = function() {
+            document.getElementById('cat-dialog').showModal(); window.loadCategories();
         };
-        
+
         window.loadCategories = async function() {
             const res = await fetch('/api/categories');
             const cats = await res.json();
             const editableCats = cats.filter(c => c.name !== '미분류');
             const uncat = cats.find(c => c.name === '미분류');
-            
+
             const list = document.getElementById('cat-list');
             if(list) {
                 list.innerHTML = editableCats.map(c => `
@@ -494,16 +327,17 @@
                 `).join('');
             }
 
-            const select = document.getElementById('category_select');
             const editSelect = document.getElementById('edit_category_select');
-            let val = select ? select.value : '';
-            let evalue = editSelect ? editSelect.value : '';
-            
-            let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            if(select) { select.innerHTML = selectHtml; select.value = val; }
-            if(editSelect) { editSelect.innerHTML = selectHtml; editSelect.value = evalue; }
+            const evalue = editSelect ? editSelect.value : '';
+            const editHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            if(editSelect) { editSelect.innerHTML = editHtml; editSelect.value = evalue; }
+
+            const searchSelect = document.getElementById('search_category_select');
+            const svalue = searchSelect ? searchSelect.value : '';
+            const searchHtml = `<option value="">전체 분류</option>` + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            if(searchSelect) { searchSelect.innerHTML = searchHtml; searchSelect.value = svalue; }
         };
-        
+
         window.addCat = async function() {
             const n = document.getElementById('new_cat_name'); if (!n || !n.value) return;
             try {
@@ -537,57 +371,47 @@
             } catch(err) { window.showToast('분류 순서 변경에 실패했습니다.', 'error'); }
         };
 
-        // 내역 등록이나 수정 시 해당 월 내역 리셋 (캐시는 비워서 전체를 새로 그리도록 함)
-        window.resetAndFetchCurrentList = function() {
-            let cUid = `${window.currentTxY}_${window.currentTxM}`;
-            window.allTxPagesData[cUid].page = 1;
-            window.allTxPagesData[cUid].cachedHtml = '';
-            document.getElementById('slide-tx-curr').innerHTML = window.renderTxSlide(cUid);
-            window.loadMoreTxs(cUid);
-        };
-
-        document.getElementById('tx-add-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = e.target.querySelector('button[type="submit"]');
-            if (btn.disabled) return;
-            btn.disabled = true;
-            const fd = new FormData(e.target); fd.append('ajax', '1');
-            try {
-                const res = await fetch(e.target.action, { method: 'POST', body: fd });
-                if (res.ok) {
-                    document.getElementById('amount_input').value = '';
-                    document.getElementById('title_input').value = '';
-                    document.getElementById('memo_input').value = '';
-                    document.getElementById('exclude_analysis').checked = false;
-
-                    window.showToast('등록이 완료되었습니다.', 'success');
-                    window.resetAndFetchCurrentList();
-                } else {
-                    window.showToast('등록에 실패했습니다. 다시 시도해주세요.', 'error');
-                }
-            } catch(err) {
-                window.showToast('네트워크 오류로 등록하지 못했습니다.', 'error');
-            } finally {
-                btn.disabled = false;
-            }
-        });
-
         window.setEditTxType = function(type) {
             document.getElementById('edit_tx_type').value = type;
-            if (type === '지출') { 
-                document.getElementById('edit-btn-expense').classList.add('active'); 
-                document.getElementById('edit-btn-income').classList.remove('active'); 
-            } else { 
-                document.getElementById('edit-btn-income').classList.add('active'); 
-                document.getElementById('edit-btn-expense').classList.remove('active'); 
+            if (type === '지출') {
+                document.getElementById('edit-btn-expense').classList.add('active');
+                document.getElementById('edit-btn-income').classList.remove('active');
+            } else {
+                document.getElementById('edit-btn-income').classList.add('active');
+                document.getElementById('edit-btn-expense').classList.remove('active');
             }
+        };
+
+        window.openAddSheet = function() {
+            document.getElementById('sheet-title').innerText = '내역 등록';
+            document.getElementById('tx-edit-form').action = '/transaction';
+
+            window.setEditTxType('지출');
+            document.getElementById('edit_amount_input').value = '';
+            window.syncTransactorGroup(document.getElementById('edit-transactor-group'), window.currentUserNickname);
+            document.getElementById('edit_title_input').value = '';
+            document.getElementById('edit_category_select').value = document.querySelector('#edit_category_select option').value;
+
+            const now = new Date();
+            const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
+            const hh = String(now.getHours()).padStart(2,'0'), mi = String(now.getMinutes()).padStart(2,'0');
+            document.getElementById('edit_date_input').value = `${y}-${m}-${d}`;
+            document.getElementById('edit_time_input').value = `${hh}:${mi}`;
+            document.getElementById('time_picker_input_edit').value = `${hh}:${mi}`;
+
+            document.getElementById('edit_memo_input').value = '';
+            document.getElementById('edit_exclude_analysis').checked = false;
+
+            document.getElementById('edit-sheet-overlay').classList.add('active');
+            document.getElementById('edit-bottom-sheet').classList.add('active');
         };
 
         window.openEditSheet = function(id) {
             const tx = window.txDataStore[id];
             if(!tx) return;
+            document.getElementById('sheet-title').innerText = '내역 수정';
             document.getElementById('tx-edit-form').action = `/transaction/${tx.id}/edit`;
-            
+
             window.setEditTxType(tx.tx_type);
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
             window.syncTransactorGroup(document.getElementById('edit-transactor-group'), tx.transactor);
@@ -598,7 +422,7 @@
             document.getElementById('time_picker_input_edit').value = tx.time;
             document.getElementById('edit_memo_input').value = tx.memo || "";
             document.getElementById('edit_exclude_analysis').checked = tx.exclude_analysis;
-            
+
             document.getElementById('edit-sheet-overlay').classList.add('active');
             document.getElementById('edit-bottom-sheet').classList.add('active');
         };
@@ -613,18 +437,19 @@
             const btn = e.target.querySelector('button[type="submit"]');
             if (btn.disabled) return;
             btn.disabled = true;
+            const isAdd = e.target.action.endsWith('/transaction');
             const fd = new FormData(e.target); fd.append('ajax', '1');
             try {
                 const res = await fetch(e.target.action, {method: 'POST', body: fd});
                 if(res.ok) {
                     window.closeEditSheet();
-                    window.showToast('수정이 완료되었습니다.', 'success');
-                    window.resetAndFetchCurrentList();
+                    window.showToast(isAdd ? '등록이 완료되었습니다.' : '수정이 완료되었습니다.', 'success');
+                    window.loadMoreResults(true);
                 } else {
-                    window.showToast('수정에 실패했습니다. 다시 시도해주세요.', 'error');
+                    window.showToast(isAdd ? '등록에 실패했습니다. 다시 시도해주세요.' : '수정에 실패했습니다. 다시 시도해주세요.', 'error');
                 }
             } catch(err) {
-                window.showToast('네트워크 오류로 수정하지 못했습니다.', 'error');
+                window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');
             } finally {
                 btn.disabled = false;
             }
@@ -637,7 +462,7 @@
                 let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
                 if(res.ok) {
                     window.showToast('삭제되었습니다.', 'success');
-                    window.resetAndFetchCurrentList();
+                    window.loadMoreResults(true);
                 } else {
                     window.showToast('삭제에 실패했습니다. 다시 시도해주세요.', 'error');
                 }

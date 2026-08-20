@@ -295,24 +295,13 @@
         `;
 
         const skeletonTransactions = `
-            <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;">◀</a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;">▶</a></div>
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">내역 검색</h2>
             <div class="card" style="margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;"><h3 style="font-size: 16px; font-weight: 700;">새 내역 등록</h3><div class="skeleton" style="width: 80px; height: 28px; border-radius: 6px;"></div></div>
-                <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
-                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 44px; border-radius: 16px;"></div></div>
-                <div class="skeleton" style="width: 100%; height: 44px; border-radius: 16px; margin-top: 16px;"></div>
+                <div style="display: flex; gap: 8px; margin-bottom: 12px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
+                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
+                <div style="display: flex; gap: 8px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
             </div>
             <div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div>
-        `;
-
-        const skeletonSearch = `
-            <div style="margin-bottom: var(--spacing-lg);"><a href="#" style="text-decoration: none; color: var(--color-muted); font-size: 14px;">◀ 내역으로 돌아가기</a></div>
-            <div class="card">
-                <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-base);">내역 상세 검색</h2>
-                <div style="display: flex; gap: 8px; margin-bottom: 16px;"><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div><div class="skeleton" style="flex: 1; height: 40px; border-radius: 8px;"></div></div>
-                <div class="skeleton" style="height: 44px; border-radius: 16px; margin-bottom: 12px;"></div>
-            </div>
-            <div class="card" style="background: transparent; border: none; padding: 0;"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: var(--spacing-base);">검색 결과</h3><div class="skeleton-card" style="padding: 16px;"><div class="skeleton skeleton-text short"></div><div class="skeleton" style="height:50px; border-radius:8px;"></div></div></div>
         `;
 
         const skeletonSettings = `
@@ -333,7 +322,6 @@
             try { path = new URL(urlStr, window.location.origin).pathname; } catch(e) { path = urlStr; }
             if (path.includes('calendar')) return skeletonCalendar;
             if (path.includes('transactions')) return skeletonTransactions;
-            if (path.includes('search')) return skeletonSearch;
             if (path.includes('settings') || path.includes('csv_manage')) return skeletonSettings;
             if (path.includes('onboarding') || path.includes('login')) return skeletonOnboarding;
             return skeletonHome;
