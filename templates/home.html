@@ -7,10 +7,10 @@
 </style>
 
 <div class="month-selector">
-    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(-1)" class="no-spa">◀</a> 
+    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(-1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a>
     <!-- 월 선택 다이얼로그 연동 -->
     <h3 id="home-month-header" onclick="window.openMonthPicker(window.currentHomeY || {{ t_year }}, window.currentHomeM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월</h3>
-    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(1)" class="no-spa">▶</a>
+    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></a>
 </div>
 
 <div id="home-slider-wrapper">
