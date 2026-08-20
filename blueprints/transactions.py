@@ -18,7 +18,11 @@ def transactions():
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
 
     now = datetime.now()
-    start, end = month_range(now.year, now.month)
+    y = request.args.get('year')
+    m = request.args.get('month')
+    target_year, target_month = (int(y), int(m)) if y and m else (now.year, now.month)
+
+    start, end = month_range(target_year, target_month)
     default_start = start.strftime('%Y-%m-%d')
     default_end = (end - timedelta(days=1)).strftime('%Y-%m-%d')
 

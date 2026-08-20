@@ -225,7 +225,11 @@
         window.selectDate = function(dateStr) {
             window.selectedDate = dateStr;
             document.querySelectorAll('.cal-cell').forEach(el => el.style.backgroundColor = '');
-            let cell = document.getElementById('cal-cell-' + dateStr);
+            // slide-prev/curr/next가 비동기로 갱신되는 동안 같은 날짜 id가 잠깐 중복될 수 있어서
+            // (예: 이전 달로 넘긴 직후 slide-prev가 아직 옛 내용을 들고 있는 채로 남아있는 순간),
+            // document 전체가 아니라 실제 보여지는 slide-curr 안에서만 셀을 찾는다.
+            let currSlide = document.getElementById('slide-curr');
+            let cell = currSlide ? currSlide.querySelector('#cal-cell-' + dateStr) : null;
             if(cell) cell.style.backgroundColor = 'rgba(6, 169, 108, 0.1)';
             
             // 날짜만 간결하게 표시
@@ -292,7 +296,8 @@
             }
             
             document.getElementById('cal-month-header').innerText = `${window.currentY}년 ${window.currentM}월`;
-            
+            window.setStoredMonth(window.currentY, window.currentM);
+
             setTimeout(async () => {
                 slider.style.transition = 'none';
                 slider.style.transform = `translateX(-33.333%)`;

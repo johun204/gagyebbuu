@@ -235,7 +235,8 @@
             }
             
             document.getElementById('home-month-header').innerText = `${window.currentHomeY}년 ${window.currentHomeM}월`;
-            
+            window.setStoredMonth(window.currentHomeY, window.currentHomeM);
+
             setTimeout(async () => {
                 slider.style.transition = 'none';
                 slider.style.transform = `translateX(-33.333%)`;

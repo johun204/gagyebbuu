@@ -196,19 +196,19 @@
     <div id="nav-container">
         {% if current_user_id and has_ledger %}
         <div class="bottom-nav">
-            <a href="/home" class="nav-link {% if current_tab == 'home' %}active{% endif %}">
+            <a href="/home" onclick="event.preventDefault(); window.navigateTab('/home');" class="nav-link {% if current_tab == 'home' %}active{% endif %}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>
                 홈
             </a>
-            <a href="/calendar?year=today&month=today" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}">
+            <a href="/calendar" onclick="event.preventDefault(); window.navigateTab('/calendar');" class="nav-link {% if current_tab == 'calendar' %}active{% endif %}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>
                 달력
             </a>
-            <a href="/transactions" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}">
+            <a href="/transactions" onclick="event.preventDefault(); window.navigateTab('/transactions');" class="nav-link {% if current_tab == 'transactions' %}active{% endif %}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
                 내역
             </a>
-            <a href="/settings" class="nav-link {% if current_tab == 'settings' %}active{% endif %}">
+            <a href="/settings" onclick="event.preventDefault(); window.navigateTab('/settings');" class="nav-link {% if current_tab == 'settings' %}active{% endif %}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
                 설정
             </a>
@@ -239,6 +239,39 @@
     </dialog>
 
     <script>
+        // 탭(홈/달력/내역) 간에 마지막으로 보던 연/월을 공유하기 위한 저장소.
+        // 없으면(=null) "오늘"을 의미한다.
+        window.MONTH_TABS = ['/home', '/calendar', '/transactions'];
+
+        window.getStoredMonth = function() {
+            const v = localStorage.getItem('gb_selected_ym');
+            if (!v) return null;
+            const [y, m] = v.split('-').map(Number);
+            if (!y || !m) return null;
+            return { y, m };
+        };
+
+        window.setStoredMonth = function(y, m) {
+            localStorage.setItem('gb_selected_ym', `${y}-${m}`);
+        };
+
+        window.clearStoredMonth = function() {
+            localStorage.removeItem('gb_selected_ym');
+        };
+
+        // 하단 네비게이션 클릭 처리: 다른 탭으로 이동하면 저장된 연/월을 그대로 이어서 보여주고,
+        // 이미 보고 있는 탭을 다시 누르면 오늘 날짜로 초기화한다.
+        window.navigateTab = function(basePath) {
+            const currentPath = window.location.pathname === '/' ? '/home' : window.location.pathname;
+            if (currentPath === basePath) {
+                window.clearStoredMonth();
+                navigate(basePath);
+                return;
+            }
+            const stored = window.MONTH_TABS.includes(basePath) ? window.getStoredMonth() : null;
+            navigate(stored ? `${basePath}?year=${stored.y}&month=${stored.m}` : basePath);
+        };
+
         window.openMonthPicker = function(currentY, currentM) {
             let mStr = currentM.toString().padStart(2, '0');
             document.getElementById('global_month_input').value = `${currentY}-${mStr}`;
@@ -251,6 +284,7 @@
             let parts = val.split('-');
             let path = window.location.pathname;
             document.getElementById('global-month-picker').close();
+            window.setStoredMonth(parseInt(parts[0], 10), parseInt(parts[1], 10));
             navigate(`${path}?year=${parts[0]}&month=${parseInt(parts[1], 10)}`);
         };
 
