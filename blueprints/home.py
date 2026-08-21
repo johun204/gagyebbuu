@@ -7,7 +7,7 @@ from helpers import spa_redirect, get_target_date, month_range
 
 home_bp = Blueprint('home', __name__)
 
-THEME_COLORS = ['#4CA98C', '#E0A458', '#4FA0BF', '#C98BC0', '#E0776D', '#E0C468', '#8C7BC0', '#6EB5C4', '#D99BC7', '#6FAE96']
+THEME_COLORS = ['#2E9678', '#E0A458', '#4FA0BF', '#C98BC0', '#E0776D', '#E0C468', '#8C7BC0', '#6EB5C4', '#D99BC7', '#6FAE96']
 
 
 def _aggregate_expenses(txs, cat_names, days_in_month):

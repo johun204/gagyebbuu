@@ -70,6 +70,12 @@ def api_transactions():
     if max_amount and max_amount.isdigit():
         query = query.filter(Transaction.amount <= int(max_amount))
 
+    if request.args.get('exclude_budget_only') == '1':
+        query = query.filter(Transaction.exclude_budget.is_(True))
+
+    if request.args.get('exclude_analysis_only') == '1':
+        query = query.filter(Transaction.exclude_analysis.is_(True))
+
     total_count = query.count()
 
     paginated_txs = query.options(joinedload(Transaction.category), joinedload(Transaction.user)) \

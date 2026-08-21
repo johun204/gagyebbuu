@@ -10,7 +10,7 @@
     .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
     .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
 
-    .fab { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 84px); right: 20px; width: 56px; height: 56px; border-radius: 28px; background: var(--color-action); color: #fff; font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(61, 145, 121, 0.4); z-index: 999; cursor: pointer; border: none; text-decoration: none; }
+    .fab { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 84px); right: 20px; width: 56px; height: 56px; border-radius: 28px; background: var(--color-action); color: #fff; font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(34, 117, 95, 0.4); z-index: 999; cursor: pointer; border: none; text-decoration: none; }
 
     #edit-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
     #edit-sheet-overlay.active { opacity: 1; pointer-events: auto; }
@@ -42,9 +42,9 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="number" name="min_amount" id="search_min_amount" class="input-field" placeholder="최소 금액(원)"></div>
+            <div class="input-wrapper"><input type="text" inputmode="numeric" name="min_amount" id="search_min_amount" class="input-field" placeholder="최소 금액(원)" oninput="window.formatNumber(this)"></div>
             <span style="color: var(--color-muted);">~</span>
-            <div class="input-wrapper"><input type="number" name="max_amount" id="search_max_amount" class="input-field" placeholder="최대 금액(원)"></div>
+            <div class="input-wrapper"><input type="text" inputmode="numeric" name="max_amount" id="search_max_amount" class="input-field" placeholder="최대 금액(원)" oninput="window.formatNumber(this)"></div>
         </div>
 
         <div class="flex-row">
@@ -55,6 +55,15 @@
                 </select>
                 <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
+        </div>
+
+        <div class="flex-row" style="margin-bottom: 12px; gap: 16px;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" name="exclude_budget_only" id="search_exclude_budget_only" value="1" style="width:16px; height:16px;"> 예산제외 항목만
+            </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" name="exclude_analysis_only" id="search_exclude_analysis_only" value="1" style="width:16px; height:16px;"> 분석제외 항목만
+            </label>
         </div>
 
         <div class="flex-row" style="margin-bottom: 0;">
@@ -88,7 +97,7 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" oninput="window.formatNumber(this)" required></div>
+            <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
 
         <div id="edit-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -100,7 +109,7 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" required></div>
+            <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" placeholder="제목" required></div>
         </div>
 
         <div class="flex-row">
@@ -204,7 +213,11 @@
         window.buildSearchQuery = function(page) {
             const fd = new FormData(document.getElementById('search-form'));
             const params = new URLSearchParams();
-            for (const [k, v] of fd.entries()) { if (v) params.set(k, v); }
+            for (const [k, v] of fd.entries()) {
+                if (!v) continue;
+                const val = (k === 'min_amount' || k === 'max_amount') ? v.replace(/,/g, '') : v;
+                params.set(k, val);
+            }
             params.set('page', page);
             return params.toString();
         };
@@ -294,6 +307,8 @@
             document.getElementById('search_min_amount').value = '';
             document.getElementById('search_max_amount').value = '';
             document.getElementById('search_category_select').value = '';
+            document.getElementById('search_exclude_budget_only').checked = false;
+            document.getElementById('search_exclude_analysis_only').checked = false;
             window.setSearchTxType('');
         };
 
@@ -387,9 +402,11 @@
             if (type === '지출') {
                 document.getElementById('edit-btn-expense').classList.add('active');
                 document.getElementById('edit-btn-income').classList.remove('active');
+                document.getElementById('edit_amount_input').placeholder = '지출 금액(원)';
             } else {
                 document.getElementById('edit-btn-income').classList.add('active');
                 document.getElementById('edit-btn-expense').classList.remove('active');
+                document.getElementById('edit_amount_input').placeholder = '수입 금액(원)';
             }
         };
 
