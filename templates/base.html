@@ -78,7 +78,7 @@
     
     <style>
         :root {
-            --color-primary: #13bd7e; --color-action: #06a96c; --color-canvas: #ffffff;
+            --color-primary: #4CA98C; --color-action: #3D9179; --color-danger: #E2685C; --color-canvas: #ffffff;
             --color-foreground: #111111; --color-secondary: #555c68; --color-muted: #9fa4b0; --color-line: #f0f2f5;
             --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, sans-serif;
             --spacing-sm: 8px; --spacing-md: 12px; --spacing-base: 16px; --spacing-lg: 24px;
@@ -109,7 +109,7 @@
         .nav-link.active .nav-icon { stroke-width: 2.4; }
 
         .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--color-action); color: var(--color-canvas); border-radius: var(--radius-action); padding: 12px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; flex-shrink: 0; }
-        .chip { display: inline-flex; align-items: center; justify-content: center; background-color: rgba(19, 189, 126, 0.15); color: var(--color-primary); border-radius: var(--radius-chip); padding: 6px 12px; font-size: 14px; font-weight: 500; border: none; text-decoration: none; cursor: pointer; flex-shrink: 0; }
+        .chip { display: inline-flex; align-items: center; justify-content: center; background-color: rgba(76, 169, 140, 0.15); color: var(--color-primary); border-radius: var(--radius-chip); padding: 6px 12px; font-size: 14px; font-weight: 500; border: none; text-decoration: none; cursor: pointer; flex-shrink: 0; }
         .card { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-card); padding: var(--spacing-lg); margin-bottom: var(--spacing-lg); }
         .input-field, select { background-color: var(--color-canvas); border: 1px solid var(--color-line); border-radius: var(--radius-action); padding: 12px 16px; font-size: 16px; color: var(--color-foreground); outline: none; font-family: var(--font-sans); width: 100%; box-sizing: border-box; min-width: 0; }
         .input-field:focus, select:focus { border-color: var(--color-primary); }
@@ -142,7 +142,15 @@
         .toast { background: var(--color-foreground); color: #fff; padding: 12px 20px; border-radius: var(--radius-action); font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(-12px); transition: opacity .25s ease, transform .25s ease; }
         .toast.show { opacity: 1; transform: translateY(0); }
         .toast.toast-success { background: var(--color-action); }
-        .toast.toast-error { background: #fe493d; }
+        .toast.toast-error { background: var(--color-danger); }
+
+        .toggle-switch { position: relative; display: inline-block; width: 48px; height: 28px; flex-shrink: 0; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; inset: 0; background-color: var(--color-line); transition: .2s; border-radius: 999px; cursor: pointer; }
+        .toggle-slider::before { position: absolute; content: ""; height: 22px; width: 22px; left: 3px; bottom: 3px; background-color: #fff; transition: .2s; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+        .toggle-switch input:checked + .toggle-slider { background-color: var(--color-action); }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+        .toggle-switch input:disabled + .toggle-slider { opacity: .5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -315,13 +323,18 @@
                     <div class="skeleton" style="width: 100%; height: 6px; border-radius: 3px; margin-bottom: 8px;"></div>
                 </div>
             </div>
-            <div class="card"><h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3><div class="skeleton" style="width:100%; height:150px; border-radius:8px;"></div></div>
+            <div class="card">
+                <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3>
+                <div class="skeleton" style="width:100%; height:120px; border-radius:8px; margin-bottom: 16px;"></div>
+                <div class="skeleton" style="width:100%; height:120px; border-radius:8px; margin-bottom: 16px;"></div>
+                <div class="skeleton" style="width:100%; max-width:220px; height:220px; border-radius:50%; margin: 0 auto;"></div>
+            </div>
         `;
 
         const skeletonCalendar = `
             <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></a></div>
             <div class="card" style="padding: 16px; margin-bottom: 8px;">
-                <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 12px; font-size:12px; font-weight:700;"><div style="color: #fe493d;">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: #0abde3;">토</div></div>
+                <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 12px; font-size:12px; font-weight:700;"><div style="color: var(--color-danger);">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: #4FA0BF;">토</div></div>
                 <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; row-gap: 8px;">
                     ${Array(35).fill('<div class="skeleton" style="min-height:50px; border-radius:4px;"></div>').join('')}
                 </div>
@@ -341,9 +354,19 @@
 
         const skeletonSettings = `
             <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">설정</h2>
-            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
-            <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">참여 중인 사용자</h3><div class="skeleton" style="height:48px; border-radius:16px; margin-bottom:8px;"></div><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:56px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:56px; border-radius:16px;"></div></div>
             <div class="card"><h3 style="font-size: 16px; font-weight: 700; margin-bottom: 16px;">예산 설정</h3><div class="skeleton" style="height:150px; border-radius:16px;"></div></div>
+        `;
+
+        const skeletonMypage = `
+            <div class="skeleton skeleton-text short" style="height:14px; margin-bottom: var(--spacing-lg);"></div>
+            <h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">마이페이지</h2>
+            <div class="card"><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:48px; border-radius:16px; margin-bottom:8px;"></div><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:80px; border-radius:16px;"></div></div>
+            <div class="card"><div class="skeleton" style="height:48px; border-radius:16px;"></div></div>
         `;
 
         const skeletonOnboarding = `
@@ -357,7 +380,8 @@
             try { path = new URL(urlStr, window.location.origin).pathname; } catch(e) { path = urlStr; }
             if (path.includes('calendar')) return skeletonCalendar;
             if (path.includes('transactions')) return skeletonTransactions;
-            if (path.includes('settings') || path.includes('csv_manage')) return skeletonSettings;
+            if (path.includes('mypage')) return skeletonMypage;
+            if (path.includes('settings')) return skeletonSettings;
             if (path.includes('onboarding') || path.includes('login')) return skeletonOnboarding;
             return skeletonHome;
         }

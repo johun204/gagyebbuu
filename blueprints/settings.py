@@ -19,6 +19,15 @@ def settings():
     return render_template('settings.html', ledger=ledger, current_user=user, categories=categories, current_tab='settings')
 
 
+@settings_bp.route('/mypage')
+def mypage():
+    user = User.query.get(request.user_id)
+    if not user: return spa_redirect(url_for('auth.logout'))
+    if not user.ledger_id: return redirect(url_for('auth.onboarding'))
+    ledger = Ledger.query.get(user.ledger_id)
+    return render_template('mypage.html', ledger=ledger, current_user=user, current_tab='settings')
+
+
 @settings_bp.route('/update_nickname', methods=['POST'])
 def update_nickname():
     user = User.query.get(request.user_id)
@@ -151,11 +160,6 @@ def export_csv():
     return response
 
 
-@settings_bp.route('/csv_manage')
-def csv_manage():
-    return render_template('csv_manage.html', current_tab='settings')
-
-
 def _resolve_category_id(ledger_id, name, cache):
     if name in cache:
         return cache[name]
@@ -210,4 +214,4 @@ def import_csv():
                 db.session.add(new_tx)
 
         db.session.commit()
-    return spa_redirect(url_for('settings.csv_manage'))
+    return spa_redirect(url_for('settings.mypage'))

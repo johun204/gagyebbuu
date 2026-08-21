@@ -52,7 +52,7 @@
 
                 if (data.ledger_budget > 0) {
                     let max_total = Math.max(data.budget_expense, data.ledger_budget);
-                    let colorWarning = data.budget_expense > data.ledger_budget ? 'color: #fe493d;' : '';
+                    let colorWarning = data.budget_expense > data.ledger_budget ? 'color: var(--color-danger);' : '';
                     budgetHtml += `
                         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
                             전체 예산 <span style="${colorWarning}">(${data.budget_expense.toLocaleString()} / ${data.ledger_budget.toLocaleString()})</span>
@@ -85,7 +85,7 @@
                 
                 data.budget_status.forEach(b => {
                     let isExceeded = b.spent > b.budget;
-                    let colorStyle = (b.budget > 0 && isExceeded) ? 'color: #fe493d; font-weight: 700;' : '';
+                    let colorStyle = (b.budget > 0 && isExceeded) ? 'color: var(--color-danger); font-weight: 700;' : '';
                     let max_val = Math.max(b.spent, b.budget);
                     
                     let barsHtml = '';
@@ -152,24 +152,30 @@
                 <div class="card">
                     <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
                     <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                        <div style="flex: 1; padding: 16px; background: rgba(19, 189, 126, 0.05); border-radius: var(--radius-action);">
+                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(76, 169, 140, 0.08); border-radius: var(--radius-action);">
                             <div style="font-size: 14px; color: var(--color-secondary);">총 수입</div>
-                            <div style="font-size: 18px; font-weight: 700; color: var(--color-action);">+${data.monthly_income.toLocaleString()}원</div>
+                            <div id="incomeAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-action); overflow: hidden;">+${data.monthly_income.toLocaleString()}원</div>
                         </div>
-                        <div style="flex: 1; padding: 16px; background: rgba(254, 73, 61, 0.05); border-radius: var(--radius-action);">
+                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(226, 104, 92, 0.08); border-radius: var(--radius-action);">
                             <div style="font-size: 14px; color: var(--color-secondary);">총 지출</div>
-                            <div style="font-size: 18px; font-weight: 700; color: #fe493d;">-${data.monthly_expense.toLocaleString()}원</div>
+                            <div id="expenseAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-danger); overflow: hidden;">-${data.budget_expense.toLocaleString()}원</div>
                         </div>
                     </div>
                     ${budgetHtml}
                 </div>
-                
+
                 <div class="card">
                     <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3>
                     <div style="margin-bottom: 32px;">
                         <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">요일별 지출 누적 그래프</h4>
                         <div style="max-width: 100%;">
                             <canvas id="dowChart_${uid}"></canvas>
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 32px;">
+                        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">일별 지출 누적 그래프</h4>
+                        <div style="max-width: 100%;">
+                            <canvas id="dayChart_${uid}"></canvas>
                         </div>
                     </div>
                     <div style="display: flex; justify-content: center;">
@@ -185,10 +191,12 @@
 
         window.initHomeCharts = function(data) {
             let uid = `${data.year}_${data.month}`;
-            if(window.appCharts && window.appCharts['dow_'+uid]) window.appCharts['dow_'+uid].destroy();
-            if(window.appCharts && window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
-            
-            const themeColors = ['#13bd7e', '#ff9f43', '#0abde3', '#f368e0', '#ff6b6b', '#feca57', '#5f27cd', '#48dbfb', '#ff9ff3', '#10ac84'];
+            window.appCharts = window.appCharts || {};
+            if(window.appCharts['dow_'+uid]) window.appCharts['dow_'+uid].destroy();
+            if(window.appCharts['day_'+uid]) window.appCharts['day_'+uid].destroy();
+            if(window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
+
+            const themeColors = ['#4CA98C', '#E0A458', '#4FA0BF', '#C98BC0', '#E0776D', '#E0C468', '#8C7BC0', '#6EB5C4', '#D99BC7', '#6FAE96'];
             // 색상은 카테고리의 고정 순서(sort_order) 기준 인덱스로 배정한다.
             // 그 달에 지출이 없는 카테고리는 필터링되지만, 색 인덱스는 전체 목록 기준 위치를 그대로 쓰기 때문에
             // 활성 카테고리 구성이 달마다 달라져도 같은 카테고리는 항상 같은 색을 유지한다.
@@ -196,30 +204,55 @@
             const activeCats = allCatNames.filter(k => data.cat_expense_total[k] > 0);
             const catDataArr = activeCats.map(k => data.cat_expense_total[k]);
             const catColors = activeCats.map(k => themeColors[allCatNames.indexOf(k) % themeColors.length]);
-            
+
             const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
             const datasets = activeCats.map((cat, i) => { return { label: cat, data: data.dow_expense_by_cat[cat], backgroundColor: catColors[i] }; });
-            
+
             const dowEl = document.getElementById('dowChart_'+uid);
             if(dowEl) {
-                window.appCharts = window.appCharts || {};
                 window.appCharts['dow_'+uid] = new Chart(dowEl, { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
             }
-            
+
+            const dayLabels = Array.from({ length: data.days_in_month }, (_, i) => (i + 1) + '일');
+            const dayDatasets = activeCats.map((cat, i) => { return { label: cat, data: data.day_expense_by_cat[cat], backgroundColor: catColors[i] }; });
+
+            const dayEl = document.getElementById('dayChart_'+uid);
+            if(dayEl) {
+                window.appCharts['day_'+uid] = new Chart(dayEl, { type: 'bar', data: { labels: dayLabels, datasets: dayDatasets }, options: { scales: { x: { stacked: true, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { display: false } } } });
+            }
+
             const catEl = document.getElementById('categoryChart_'+uid);
             if(catEl) {
                 window.appCharts['cat_'+uid] = new Chart(catEl, { type: 'pie', data: { labels: activeCats, datasets: [{ data: catDataArr, backgroundColor: catColors, borderWidth: 0 }] }, options: { plugins: { legend: { position: 'bottom' } } } });
             }
         };
 
+        // 금액이 길어져 카드 폭을 넘으면(예: 천만원대) 한 줄을 유지하도록 폰트 크기를 줄여준다.
+        window.fitText = function(el, maxSize, minSize) {
+            if (!el) return;
+            let size = maxSize;
+            el.style.fontSize = size + 'px';
+            while (el.scrollWidth > el.clientWidth && size > minSize) {
+                size -= 1;
+                el.style.fontSize = size + 'px';
+            }
+        };
+
+        window.mountHomeSlide = function(elId, data) {
+            document.getElementById(elId).innerHTML = window.renderHomeSlide(data);
+            window.initHomeCharts(data);
+            let uid = `${data.year}_${data.month}`;
+            window.fitText(document.getElementById('incomeAmt_'+uid), 18, 12);
+            window.fitText(document.getElementById('expenseAmt_'+uid), 18, 12);
+        };
+
         window.allHomeData[`${window.currentHomeY}-${window.currentHomeM}`] = window.initialHomeData;
-        document.getElementById('slide-home-curr').innerHTML = window.renderHomeSlide(window.initialHomeData);
-        window.initHomeCharts(window.initialHomeData);
-        
+        window.mountHomeSlide('slide-home-curr', window.initialHomeData);
+
         let p = window.getPrevMonth(window.currentHomeY, window.currentHomeM);
         let n = window.getNextMonth(window.currentHomeY, window.currentHomeM);
-        window.fetchHomeData(p.y, p.m).then(d => { document.getElementById('slide-home-prev').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
-        window.fetchHomeData(n.y, n.m).then(d => { document.getElementById('slide-home-next').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
+        window.fetchHomeData(p.y, p.m).then(d => window.mountHomeSlide('slide-home-prev', d));
+        window.fetchHomeData(n.y, n.m).then(d => window.mountHomeSlide('slide-home-next', d));
 
         window.shiftHomeMonth = async function(dir) {
             let slider = document.getElementById('home-slider');
@@ -242,13 +275,12 @@
                 slider.style.transform = `translateX(-33.333%)`;
                 
                 let data = await window.fetchHomeData(window.currentHomeY, window.currentHomeM);
-                document.getElementById('slide-home-curr').innerHTML = window.renderHomeSlide(data);
-                window.initHomeCharts(data);
-                
+                window.mountHomeSlide('slide-home-curr', data);
+
                 let p = window.getPrevMonth(window.currentHomeY, window.currentHomeM);
                 let n = window.getNextMonth(window.currentHomeY, window.currentHomeM);
-                window.fetchHomeData(p.y, p.m).then(d => { document.getElementById('slide-home-prev').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
-                window.fetchHomeData(n.y, n.m).then(d => { document.getElementById('slide-home-next').innerHTML = window.renderHomeSlide(d); window.initHomeCharts(d); });
+                window.fetchHomeData(p.y, p.m).then(d => window.mountHomeSlide('slide-home-prev', d));
+                window.fetchHomeData(n.y, n.m).then(d => window.mountHomeSlide('slide-home-next', d));
                 
                 window.history.replaceState(null, '', `/home?year=${window.currentHomeY}&month=${window.currentHomeM}`);
             }, 300);
