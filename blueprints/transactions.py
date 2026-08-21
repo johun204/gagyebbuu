@@ -83,7 +83,8 @@ def api_transactions():
             'time': tx.datetime_val.strftime('%H:%M'), 'category': tx.category.name,
             'category_id': tx.category_id,
             'transactor': tx.transactor, 'title': tx.title, 'memo': tx.memo,
-            'amount': tx.amount, 'nickname': tx.user.nickname, 'exclude_analysis': tx.exclude_analysis
+            'amount': tx.amount, 'nickname': tx.user.nickname,
+            'exclude_analysis': tx.exclude_analysis, 'exclude_budget': tx.exclude_budget
         })
 
     return jsonify({'transactions': result, 'has_next': page * per_page < total_count, 'total_count': total_count})
@@ -129,7 +130,8 @@ def add_transaction():
         tx_type=tx_type, transactor=transactor,
         title=title, memo=request.form.get('memo', ''),
         amount=amount, category_id=cat_id, datetime_val=dt,
-        exclude_analysis=(request.form.get('exclude_analysis') == 'on')
+        exclude_analysis=(request.form.get('exclude_analysis') == 'on'),
+        exclude_budget=(request.form.get('exclude_budget') == 'on')
     )
     db.session.add(new_tx)
     db.session.commit()
@@ -160,6 +162,7 @@ def edit_transaction(tx_id):
         tx.amount = int(amt_str) if amt_str.isdigit() else 0
 
         tx.exclude_analysis = (request.form.get('exclude_analysis') == 'on')
+        tx.exclude_budget = (request.form.get('exclude_budget') == 'on')
 
         cat_id = request.form.get('category_id')
         if not cat_id: cat_id = get_or_create_uncategorized(user.ledger_id)

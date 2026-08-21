@@ -140,10 +140,10 @@ def export_csv():
     for cat in categories:
         writer.writerow(['#CATEGORY_ROW', cat.name, int(cat.is_default), cat.budget, cat.sort_order])
 
-    writer.writerow(['#TX_META', 'date', 'time', 'tx_type', 'transactor', 'category', 'title', 'memo', 'amount', 'exclude_analysis', 'nickname'])
+    writer.writerow(['#TX_META', 'date', 'time', 'tx_type', 'transactor', 'category', 'title', 'memo', 'amount', 'exclude_analysis', 'nickname', 'exclude_budget'])
     for tx in transactions:
         writer.writerow(['#TX_ROW', tx.datetime_val.strftime('%Y-%m-%d'), tx.datetime_val.strftime('%H:%M'),
-                         tx.tx_type, tx.transactor, tx.category.name, tx.title, tx.memo, tx.amount, int(tx.exclude_analysis), tx.user.nickname])
+                         tx.tx_type, tx.transactor, tx.category.name, tx.title, tx.memo, tx.amount, int(tx.exclude_analysis), tx.user.nickname, int(tx.exclude_budget)])
 
     csv_data = output.getvalue().encode('utf-8-sig')
     response = Response(csv_data, mimetype="application/octet-stream")
@@ -199,7 +199,9 @@ def import_csv():
             elif row[0] == '#TX_ROW' and len(row) >= 11:
                 cat_id = _resolve_category_id(user.ledger_id, row[5], cats_cache)
                 dt = datetime.strptime(f"{row[1]} {row[2]}", "%Y-%m-%d %H:%M")
-                new_tx = Transaction(ledger_id=user.ledger_id, user_id=user.id, tx_type=row[3], transactor=row[4], title=row[6], memo=row[7], amount=int(row[8]), exclude_analysis=bool(int(row[9])), category_id=cat_id, datetime_val=dt)
+                # exclude_budget은 이후에 추가된 컬럼이라 예전 백업 파일엔 없을 수 있다 (그때는 False로 취급)
+                exclude_budget = bool(int(row[11])) if len(row) >= 12 else False
+                new_tx = Transaction(ledger_id=user.ledger_id, user_id=user.id, tx_type=row[3], transactor=row[4], title=row[6], memo=row[7], amount=int(row[8]), exclude_analysis=bool(int(row[9])), exclude_budget=exclude_budget, category_id=cat_id, datetime_val=dt)
                 db.session.add(new_tx)
             elif not row[0].startswith('#') and len(row) >= 8 and row[0] != '일자':
                 cat_id = _resolve_category_id(user.ledger_id, row[4], cats_cache)

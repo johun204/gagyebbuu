@@ -58,9 +58,15 @@
             <div class="input-wrapper"><input type="text" name="memo" class="input-field" value="{{ tx.memo }}" placeholder="상세 메모 (선택)"></div>
         </div>
         
+        <div class="flex-row" style="margin-bottom: 8px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
+                <input type="checkbox" name="exclude_budget" {% if tx.exclude_budget %}checked{% endif %} style="width:16px; height:16px;"> 예산에서만 제외하기
+            </label>
+        </div>
+
         <div class="flex-row" style="margin-bottom: 16px;">
             <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
-                <input type="checkbox" name="exclude_analysis" {% if tx.exclude_analysis %}checked{% endif %} style="width:16px; height:16px;"> 지출 분석에서 제외하기
+                <input type="checkbox" name="exclude_analysis" {% if tx.exclude_analysis %}checked{% endif %} style="width:16px; height:16px;"> 지출분석 제외
             </label>
         </div>
         

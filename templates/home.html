@@ -47,15 +47,15 @@
             let uid = `${data.year}_${data.month}`;
             
             let budgetHtml = '';
-            if(data.ledger_budget > 0 || data.monthly_expense > 0 || data.budget_status.length > 0) {
+            if(data.ledger_budget > 0 || data.budget_expense > 0 || data.budget_status.length > 0) {
                 budgetHtml += `<div style="padding-top: 16px; border-top: 1px solid var(--color-line);">`;
-                
+
                 if (data.ledger_budget > 0) {
-                    let max_total = Math.max(data.monthly_expense, data.ledger_budget);
-                    let colorWarning = data.monthly_expense > data.ledger_budget ? 'color: #fe493d;' : '';
+                    let max_total = Math.max(data.budget_expense, data.ledger_budget);
+                    let colorWarning = data.budget_expense > data.ledger_budget ? 'color: #fe493d;' : '';
                     budgetHtml += `
                         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
-                            전체 예산 <span style="${colorWarning}">(${data.monthly_expense.toLocaleString()} / ${data.ledger_budget.toLocaleString()})</span>
+                            전체 예산 <span style="${colorWarning}">(${data.budget_expense.toLocaleString()} / ${data.ledger_budget.toLocaleString()})</span>
                         </div>
                         <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
                     `;
@@ -66,15 +66,15 @@
                         }
                     }
                     budgetHtml += `</div>`;
-                } else if (data.monthly_expense > 0) {
+                } else if (data.budget_expense > 0) {
                     budgetHtml += `
                         <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
-                            총 지출 <span style="color: var(--color-secondary);">(${data.monthly_expense.toLocaleString()})</span>
+                            총 지출 <span style="color: var(--color-secondary);">(${data.budget_expense.toLocaleString()})</span>
                         </div>
                         <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
                     `;
                     for(let payer in data.payer_expense) {
-                        let pct = (data.payer_expense[payer] / data.monthly_expense) * 100;
+                        let pct = (data.payer_expense[payer] / data.budget_expense) * 100;
                         budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${data.payer_color_map[payer]};"></div>`;
                     }
                     budgetHtml += `</div>`;

@@ -33,6 +33,7 @@ def build_calendar_data(ledger_id, y, m):
             'amount': tx.amount, 'category': tx.category.name, 'time': tx.datetime_val.strftime('%H:%M'),
             'memo': tx.memo,
             'exclude_analysis': tx.exclude_analysis,
+            'exclude_budget': tx.exclude_budget,
             'category_id': tx.category_id,
             'date': d_str
         })

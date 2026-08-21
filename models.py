@@ -39,7 +39,8 @@ class Transaction(db.Model):
     title = db.Column(db.String(100), nullable=False, default='')
     memo = db.Column(db.String(255), nullable=True, default='')
     amount = db.Column(db.Integer, nullable=False)
-    exclude_analysis = db.Column(db.Boolean, default=False) # 분석 제외 컬럼 추가
+    exclude_analysis = db.Column(db.Boolean, default=False) # 지출 분석(차트/총계)에서 제외
+    exclude_budget = db.Column(db.Boolean, default=False) # 예산 진행률 계산에서만 제외
     
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'), nullable=False)
     datetime_val = db.Column(db.DateTime, nullable=False, default=datetime.now)
