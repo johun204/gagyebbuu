@@ -152,11 +152,11 @@
                 <div class="card">
                     <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
                     <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(46, 150, 120, 0.08); border-radius: var(--radius-action);">
+                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(34, 181, 127, 0.08); border-radius: var(--radius-action);">
                             <div style="font-size: 14px; color: var(--color-secondary);">총 수입</div>
                             <div id="incomeAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-action); overflow: hidden;">+${data.monthly_income.toLocaleString()}원</div>
                         </div>
-                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(226, 104, 92, 0.08); border-radius: var(--radius-action);">
+                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(240, 104, 90, 0.08); border-radius: var(--radius-action);">
                             <div style="font-size: 14px; color: var(--color-secondary);">총 지출</div>
                             <div id="expenseAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-danger); overflow: hidden;">-${data.budget_expense.toLocaleString()}원</div>
                         </div>
@@ -166,10 +166,10 @@
 
                 <div class="card">
                     <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3>
-                    <div style="margin-bottom: 32px;">
-                        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">요일별 지출 누적 그래프</h4>
-                        <div style="max-width: 100%; height: 260px;">
-                            <canvas id="dowChart_${uid}"></canvas>
+                    <div style="display: flex; justify-content: center; margin-bottom: 32px;">
+                        <div style="width: 100%; max-width: 400px; height: 340px;">
+                            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 12px; text-align: center;">카테고리별 지출 비율</h4>
+                            <canvas id="categoryChart_${uid}"></canvas>
                         </div>
                     </div>
                     <div style="margin-bottom: 32px;">
@@ -178,10 +178,10 @@
                             <canvas id="dayChart_${uid}"></canvas>
                         </div>
                     </div>
-                    <div style="display: flex; justify-content: center;">
-                        <div style="width: 100%; max-width: 400px; height: 340px;">
-                            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 12px; text-align: center;">카테고리별 지출 비율</h4>
-                            <canvas id="categoryChart_${uid}"></canvas>
+                    <div>
+                        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">요일별 지출 누적 그래프</h4>
+                        <div style="max-width: 100%; height: 260px;">
+                            <canvas id="dowChart_${uid}"></canvas>
                         </div>
                     </div>
                 </div>
@@ -189,14 +189,14 @@
             return html;
         };
 
-        window.initHomeCharts = function(data) {
+        window.initHomeCharts = function(data, container) {
             let uid = `${data.year}_${data.month}`;
             window.appCharts = window.appCharts || {};
             if(window.appCharts['dow_'+uid]) window.appCharts['dow_'+uid].destroy();
             if(window.appCharts['day_'+uid]) window.appCharts['day_'+uid].destroy();
             if(window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
 
-            const themeColors = ['#2E9678', '#E0A458', '#4FA0BF', '#C98BC0', '#E0776D', '#E0C468', '#8C7BC0', '#6EB5C4', '#D99BC7', '#6FAE96'];
+            const themeColors = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
             // 색상은 카테고리의 고정 순서(sort_order) 기준 인덱스로 배정한다.
             // 그 달에 지출이 없는 카테고리는 필터링되지만, 색 인덱스는 전체 목록 기준 위치를 그대로 쓰기 때문에
             // 활성 카테고리 구성이 달마다 달라져도 같은 카테고리는 항상 같은 색을 유지한다.
@@ -208,7 +208,7 @@
             const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
             const datasets = activeCats.map((cat, i) => { return { label: cat, data: data.dow_expense_by_cat[cat], backgroundColor: catColors[i] }; });
 
-            const dowEl = document.getElementById('dowChart_'+uid);
+            const dowEl = container.querySelector('#dowChart_'+uid);
             if(dowEl) {
                 window.appCharts['dow_'+uid] = new Chart(dowEl, { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
             }
@@ -226,7 +226,7 @@
             const dayTotals = Array.from({ length: data.days_in_month }, (_, d) => activeCats.reduce((sum, cat) => sum + (data.day_expense_by_cat[cat][d] || 0), 0));
             const dayStep = window.niceMoneyStep(Math.max(0, ...dayTotals));
 
-            const dayEl = document.getElementById('dayChart_'+uid);
+            const dayEl = container.querySelector('#dayChart_'+uid);
             if(dayEl) {
                 window.appCharts['day_'+uid] = new Chart(dayEl, { type: 'bar', data: { labels: dayLabels, datasets: dayDatasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { stacked: true, beginAtZero: true, display: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { stepSize: dayStep, callback: v => v >= 10000 ? (v / 10000) + '만' : v } } }, plugins: { legend: { display: false } } } });
             }
@@ -254,7 +254,7 @@
                 }
             };
 
-            const catEl = document.getElementById('categoryChart_'+uid);
+            const catEl = container.querySelector('#categoryChart_'+uid);
             if(catEl) {
                 window.appCharts['cat_'+uid] = new Chart(catEl, { type: 'pie', data: { labels: activeCats, datasets: [{ data: catDataArr, backgroundColor: catColors, borderWidth: 0 }] }, options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }, plugins: [pieLabelPlugin] });
             }
@@ -273,11 +273,15 @@
         };
 
         window.mountHomeSlide = function(elId, data) {
-            document.getElementById(elId).innerHTML = window.renderHomeSlide(data);
-            window.initHomeCharts(data);
+            // prev/curr/next 슬라이드가 비동기로 갱신되는 동안 같은 uid를 가진 엘리먼트(차트 캔버스,
+            // 요약 금액 div)가 잠깐 중복될 수 있어서 (예: 이전 달로 이동 직후 slide-home-prev가 아직
+            // 옛 내용을 들고 있는 순간), document 전체가 아니라 이 슬라이드 컨테이너 안에서만 찾는다.
+            const container = document.getElementById(elId);
+            container.innerHTML = window.renderHomeSlide(data);
+            window.initHomeCharts(data, container);
             let uid = `${data.year}_${data.month}`;
-            window.fitText(document.getElementById('incomeAmt_'+uid), 18, 12);
-            window.fitText(document.getElementById('expenseAmt_'+uid), 18, 12);
+            window.fitText(container.querySelector('#incomeAmt_'+uid), 18, 12);
+            window.fitText(container.querySelector('#expenseAmt_'+uid), 18, 12);
         };
 
         window.allHomeData[`${window.currentHomeY}-${window.currentHomeM}`] = window.initialHomeData;
