@@ -17,12 +17,11 @@
             --color-foreground: #111111; --color-secondary: #555c68; --color-line: #f0f2f5;
             --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
         }
-        body { font-family: var(--font-sans); background-color: var(--color-primary); color: var(--color-foreground); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
-        .splash-logo-wrap { width: 96px; height: 96px; border-radius: 24px; background: #fff; box-shadow: 0 8px 24px rgba(0,0,0,.18); overflow: hidden; display:flex; align-items:center; justify-content:center; }
-        .splash-logo { width: 100%; height: 100%; object-fit: cover; }
-        .splash-wordmark { color: #fff; font-size: 20px; font-weight: 800; letter-spacing: 0.3px; }
-        .loader { margin-top: 8px; border: 4px solid rgba(255,255,255,0.35); border-top: 4px solid #fff; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
+        .splash-logo { width: 56px; height: 56px; border-radius: 14px; }
+        .splash-wordmark { color: var(--color-foreground); font-size: 16px; font-weight: 800; letter-spacing: 0.3px; }
+        .splash-progress-track { width: 140px; height: 4px; border-radius: 2px; background: var(--color-line); overflow: hidden; margin-top: 4px; }
+        .splash-progress-fill { width: 0%; height: 100%; background: var(--color-action); border-radius: 2px; transition: width 0.25s ease; }
 
         dialog { border: 1px solid var(--color-line); border-radius: 24px; padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
         dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
@@ -31,24 +30,52 @@
 </head>
 <body>
     <!-- 로그인 정보가 없으면 곧바로 /login으로 넘어가므로, 실제 로딩이 필요한 경우에만
-         아래 스플래시(로고+로더)가 그려지도록 스크립트를 body 맨 앞에 둔다. -->
+         아래 스플래시(로고+진행바)가 그려지도록 스크립트를 body 맨 앞에 둔다.
+         이 페이지는 뒤에서 document.write()로 실제 앱 페이지(base.html) 전체로 通째 교체되는데,
+         document.write는 같은 전역 스코프를 그대로 재사용하기 때문에 여기서 최상위
+         const/let을 쓰면 교체될 페이지 쪽 스크립트의 동일한 이름과 충돌해 SyntaxError로
+         죽어버린다 (실제로 겪은 버그). IIFE로 감싸고 var만 써서 격리한다. -->
     <script>
-        const token = localStorage.getItem('jwt_token');
-        const currentUrl = window.location.href;
+        (function() {
+            var token = localStorage.getItem('jwt_token');
 
-        if (window.location.pathname.startsWith('/invite/')) {
-            const hash = window.location.pathname.split('/').pop();
-            localStorage.setItem('pending_invite', hash);
-        }
+            if (window.location.pathname.startsWith('/invite/')) {
+                var hash = window.location.pathname.split('/').pop();
+                localStorage.setItem('pending_invite', hash);
+            }
 
-        if (!token) {
-            window.location.replace('/login');
-        }
+            if (!token) {
+                window.location.replace('/login');
+                return;
+            }
+
+            // 마지막으로 보고 있던 탭/페이지를 기억해뒀다가, PWA 아이콘 실행 등으로
+            // start_url("/")에 진입했을 때는 그 페이지부터 이어서 보여준다.
+            var REMEMBERED_PREFIXES = ['/home', '/calendar', '/transactions', '/settings', '/mypage'];
+            function saveLastPage(pathWithSearch) {
+                var path = pathWithSearch.split('?')[0];
+                var ok = path === '/' || REMEMBERED_PREFIXES.some(function(p) { return path === p || path.startsWith(p + '/'); });
+                if (ok) localStorage.setItem('gb_last_page', pathWithSearch);
+            }
+
+            var targetPath = window.location.pathname + window.location.search;
+            if (window.location.pathname === '/') {
+                var last = localStorage.getItem('gb_last_page');
+                if (last && last !== '/') targetPath = last;
+            }
+            if (targetPath !== window.location.pathname + window.location.search) {
+                window.history.replaceState(null, '', targetPath);
+            }
+            saveLastPage(targetPath);
+
+            window.__gbToken = token;
+            window.__gbTargetUrl = window.location.origin + targetPath;
+        })();
     </script>
 
-    <div class="splash-logo-wrap"><img src="/static/icon-192.png" alt="가계쀼" class="splash-logo"></div>
+    <img src="/static/icon-192.png" alt="가계쀼" class="splash-logo">
     <div class="splash-wordmark">가계쀼</div>
-    <div class="loader" id="loader"></div>
+    <div class="splash-progress-track"><div class="splash-progress-fill" id="splash-progress"></div></div>
 
     <dialog id="db-error-dialog">
         <div style="text-align: center; padding: 10px 0;">
@@ -62,16 +89,27 @@
     </dialog>
 
     <script>
-        if (token) {
-            const fetchWithRetry = async (url, options, maxRetries = 3) => {
-                let attempt = 0;
-                let delay = 500;
+        (function() {
+            var token = window.__gbToken;
+            if (!token) return;
+            var currentUrl = window.__gbTargetUrl;
+
+            var setProgress = function(pct) {
+                var bar = document.getElementById('splash-progress');
+                if (bar) bar.style.width = pct + '%';
+            };
+            setProgress(20); // 로그인 정보 확인 완료
+
+            var fetchWithRetry = async function(url, options, maxRetries) {
+                maxRetries = maxRetries || 3;
+                var attempt = 0;
+                var delay = 500;
                 while (attempt <= maxRetries) {
                     try {
-                        const res = await fetch(url, options);
+                        var res = await fetch(url, options);
                         if (res.status >= 500 && attempt < maxRetries) {
                             attempt++;
-                            await new Promise(r => setTimeout(r, delay));
+                            await new Promise(function(r) { setTimeout(r, delay); });
                             delay *= 2;
                             continue;
                         }
@@ -79,7 +117,7 @@
                     } catch (e) {
                         if (attempt < maxRetries) {
                             attempt++;
-                            await new Promise(r => setTimeout(r, delay));
+                            await new Promise(function(r) { setTimeout(r, delay); });
                             delay *= 2;
                             continue;
                         }
@@ -88,29 +126,32 @@
                 }
             };
 
+            setProgress(45); // 서버 요청 시작
             fetchWithRetry(currentUrl, {
                 headers: { 'Authorization': 'Bearer ' + token, 'X-Requested-With': 'XMLHttpRequest' }
             }, 3)
-            .then(res => {
+            .then(function(res) {
+                setProgress(80); // 응답 수신
                 if (res.status === 401) {
                     localStorage.removeItem('jwt_token');
                     window.location.href = '/login';
                 } else if (res.status >= 500) {
-                    document.getElementById('loader').style.display = 'none';
                     document.getElementById('db-error-dialog').showModal();
                 } else {
                     return res.text();
                 }
             })
-            .then(html => {
-                if(html) {
-                    document.open(); document.write(html); document.close();
+            .then(function(html) {
+                if (html) {
+                    setProgress(100);
+                    setTimeout(function() {
+                        document.open(); document.write(html); document.close();
+                    }, 150);
                 }
-            }).catch(() => {
-                document.getElementById('loader').style.display = 'none';
+            }).catch(function() {
                 document.getElementById('db-error-dialog').showModal();
             });
-        }
+        })();
     </script>
 </body>
 </html>

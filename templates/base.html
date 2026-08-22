@@ -267,6 +267,15 @@
             localStorage.removeItem('gb_selected_ym');
         };
 
+        // 마지막으로 보던 탭/페이지를 기억해서, PWA 아이콘 실행 등 start_url("/")로
+        // 새로 진입할 때 그 페이지부터 이어서 보여줄 수 있도록 한다 (bootstrap.html에서 사용).
+        const REMEMBERED_PREFIXES = ['/home', '/calendar', '/transactions', '/settings', '/mypage'];
+        function saveLastPage(pathWithSearch) {
+            const path = pathWithSearch.split('?')[0];
+            const ok = path === '/' || REMEMBERED_PREFIXES.some(p => path === p || path.startsWith(p + '/'));
+            if (ok) localStorage.setItem('gb_last_page', pathWithSearch);
+        }
+
         // 하단 네비게이션 클릭 처리: 다른 탭으로 이동하면 저장된 연/월을 그대로 이어서 보여주고,
         // 이미 보고 있는 탭을 다시 누르면 오늘 날짜로 초기화한다.
         window.navigateTab = function(basePath) {
@@ -401,7 +410,8 @@
             if(docNav) document.getElementById('nav-container').innerHTML = docNav.innerHTML;
 
             if(push) window.history.pushState({path: url}, '', url);
-            
+            saveLastPage(window.location.pathname + window.location.search);
+
             document.querySelectorAll('.bottom-nav a').forEach(a => {
                 a.classList.remove('active');
                 if (a.getAttribute('href').split('?')[0] === window.location.pathname) a.classList.add('active');
