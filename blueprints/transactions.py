@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from sqlalchemy.orm import joinedload
 
 from models import db, User, Ledger, Category, Transaction
-from helpers import spa_redirect, get_or_create_uncategorized, month_range
+from helpers import spa_redirect, get_or_create_uncategorized, month_range, FALLBACK_COLOR
 from blueprints.push import notify_partner
 
 transactions_bp = Blueprint('transactions', __name__)
@@ -82,13 +82,18 @@ def api_transactions():
         .order_by(Transaction.datetime_val.desc(), Transaction.id.desc()) \
         .offset((page - 1) * per_page).limit(per_page).all()
 
+    ledger = Ledger.query.get(user.ledger_id)
+    user_color_by_nickname = {u.nickname: u.color for u in ledger.users}
+
     result = []
     for tx in paginated_txs:
+        transactor_color = ledger.together_color if tx.transactor == '함께' else user_color_by_nickname.get(tx.transactor)
         result.append({
             'id': tx.id, 'tx_type': tx.tx_type, 'date': tx.datetime_val.strftime('%Y-%m-%d'),
             'time': tx.datetime_val.strftime('%H:%M'), 'category': tx.category.name,
             'category_id': tx.category_id,
-            'transactor': tx.transactor, 'title': tx.title, 'memo': tx.memo,
+            'transactor': tx.transactor, 'transactor_color': transactor_color or FALLBACK_COLOR,
+            'title': tx.title, 'memo': tx.memo,
             'amount': tx.amount, 'nickname': tx.user.nickname,
             'exclude_analysis': tx.exclude_analysis, 'exclude_budget': tx.exclude_budget
         })

@@ -27,13 +27,26 @@
     <div style="display: flex; flex-direction: column; gap: 8px;">
         {% for u in ledger.users %}
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--color-line); border-radius: var(--radius-action);">
-            <div style="font-weight: 500; font-size: 14px;">{{ u.nickname }}</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 14px; height: 14px; border-radius: 50%; background: {{ u.color or '#9fa4b0' }}; display: inline-block; flex-shrink: 0;"></span>
+                <span style="font-weight: 500; font-size: 14px;">{{ u.nickname }}</span>
+            </div>
             {% if u.id == current_user_id %}
             <div class="chip" style="font-size: 12px; padding: 4px 8px;">나</div>
             {% endif %}
         </div>
         {% endfor %}
     </div>
+</div>
+
+<div class="card">
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">내 프로필 색상</h3>
+    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">홈 화면 요약/분석과 내역 목록에서 나를 나타내는 색상이에요.</p>
+    <div id="my-color-swatches" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;"></div>
+
+    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">'함께' 색상</h3>
+    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">두 사람이 함께 쓴 내역을 나타내는 색상이에요.</p>
+    <div id="together-color-swatches" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
 </div>
 
 <div class="card">
@@ -97,7 +110,43 @@
 </div>
 
 <script>
+    window.__myColor = {{ (current_user.color or '') | tojson }};
+    window.__togetherColor = {{ (ledger.together_color or '') | tojson }};
+</script>
+<script>
     {
+        const COLOR_PALETTE = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
+
+        function renderSwatches(containerId, selected, kind) {
+            const el = document.getElementById(containerId);
+            el.innerHTML = COLOR_PALETTE.map(c => `
+                <button type="button" onclick="window.pickColor('${kind}', '${c}')"
+                    style="width:32px; height:32px; border-radius:50%; background:${c}; cursor:pointer; padding:0;
+                    border: ${c === selected ? '3px solid var(--color-foreground)' : '3px solid transparent'};"></button>
+            `).join('');
+        }
+        renderSwatches('my-color-swatches', window.__myColor, 'mine');
+        renderSwatches('together-color-swatches', window.__togetherColor, 'together');
+
+        window.pickColor = async function(kind, color) {
+            const url = kind === 'mine' ? '/update_color' : '/update_together_color';
+            const fd = new FormData();
+            fd.append('color', color);
+            fd.append('ajax', '1');
+            try {
+                const res = await fetch(url, { method: 'POST', body: fd });
+                if (res.ok) {
+                    if (kind === 'mine') { window.__myColor = color; renderSwatches('my-color-swatches', color, 'mine'); }
+                    else { window.__togetherColor = color; renderSwatches('together-color-swatches', color, 'together'); }
+                    window.showToast('색상이 변경되었습니다.', 'success');
+                } else {
+                    window.showToast('색상 변경에 실패했습니다.', 'error');
+                }
+            } catch(err) {
+                window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');
+            }
+        };
+
         window.copyLink = function() {
             const copyText = document.getElementById("invite-link");
             copyText.select();

@@ -4,7 +4,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify, Response
 
 from models import db, User, Ledger, Category, Transaction
-from helpers import spa_redirect
+from helpers import spa_redirect, COLOR_PALETTE, pick_random_color
 
 settings_bp = Blueprint('settings', __name__)
 
@@ -43,6 +43,27 @@ def update_nickname():
     return spa_redirect(url_for('settings.settings'))
 
 
+@settings_bp.route('/update_color', methods=['POST'])
+def update_color():
+    user = User.query.get(request.user_id)
+    color = request.form.get('color')
+    if color in COLOR_PALETTE:
+        user.color = color
+        db.session.commit()
+    return spa_redirect(url_for('settings.mypage'))
+
+
+@settings_bp.route('/update_together_color', methods=['POST'])
+def update_together_color():
+    user = User.query.get(request.user_id)
+    ledger = Ledger.query.get(user.ledger_id)
+    color = request.form.get('color')
+    if color in COLOR_PALETTE:
+        ledger.together_color = color
+        db.session.commit()
+    return spa_redirect(url_for('settings.mypage'))
+
+
 @settings_bp.route('/update_ledger_name', methods=['POST'])
 def update_ledger_name():
     user = User.query.get(request.user_id)
@@ -78,7 +99,7 @@ def set_budget():
 def api_get_categories():
     user = User.query.get(request.user_id)
     cats = Category.query.filter_by(ledger_id=user.ledger_id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    return jsonify([{'id': c.id, 'name': c.name, 'is_default': c.is_default} for c in cats])
+    return jsonify([{'id': c.id, 'name': c.name, 'is_default': c.is_default, 'color': c.color} for c in cats])
 
 
 @settings_bp.route('/api/category/add', methods=['POST'])
@@ -87,7 +108,8 @@ def api_add_category():
     name = request.json.get('name')
     if name:
         max_order = db.session.query(db.func.max(Category.sort_order)).filter_by(ledger_id=user.ledger_id).scalar() or 0
-        db.session.add(Category(ledger_id=user.ledger_id, name=name, sort_order=max_order + 1))
+        existing_colors = [c.color for c in Category.query.filter_by(ledger_id=user.ledger_id).all() if c.color]
+        db.session.add(Category(ledger_id=user.ledger_id, name=name, sort_order=max_order + 1, color=pick_random_color(existing_colors)))
         db.session.commit()
     return jsonify({'success': True})
 
@@ -99,6 +121,17 @@ def api_edit_category(cat_id):
     name = request.json.get('name')
     if cat and name and cat.name != '미분류':
         cat.name = name
+        db.session.commit()
+    return jsonify({'success': True})
+
+
+@settings_bp.route('/api/category/<int:cat_id>/set_color', methods=['POST'])
+def api_set_category_color(cat_id):
+    user = User.query.get(request.user_id)
+    cat = Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first()
+    color = request.json.get('color')
+    if cat and color in COLOR_PALETTE:
+        cat.color = color
         db.session.commit()
     return jsonify({'success': True})
 
@@ -145,9 +178,9 @@ def export_csv():
     writer = csv.writer(output)
 
     writer.writerow(['#LEDGER_META', ledger.name, ledger.monthly_budget])
-    writer.writerow(['#CATEGORY_META', 'name', 'is_default', 'budget', 'sort_order'])
+    writer.writerow(['#CATEGORY_META', 'name', 'is_default', 'budget', 'sort_order', 'color'])
     for cat in categories:
-        writer.writerow(['#CATEGORY_ROW', cat.name, int(cat.is_default), cat.budget, cat.sort_order])
+        writer.writerow(['#CATEGORY_ROW', cat.name, int(cat.is_default), cat.budget, cat.sort_order, cat.color or ''])
 
     writer.writerow(['#TX_META', 'date', 'time', 'tx_type', 'transactor', 'category', 'title', 'memo', 'amount', 'exclude_analysis', 'nickname', 'exclude_budget'])
     for tx in transactions:
@@ -166,7 +199,8 @@ def _resolve_category_id(ledger_id, name, cache):
     cat = Category.query.filter_by(ledger_id=ledger_id, name=name).first()
     if not cat:
         max_order = db.session.query(db.func.max(Category.sort_order)).filter_by(ledger_id=ledger_id).scalar() or 0
-        cat = Category(ledger_id=ledger_id, name=name, is_default=False, sort_order=max_order + 1)
+        existing_colors = [c.color for c in Category.query.filter_by(ledger_id=ledger_id).all() if c.color]
+        cat = Category(ledger_id=ledger_id, name=name, is_default=False, sort_order=max_order + 1, color=pick_random_color(existing_colors))
         db.session.add(cat)
         db.session.flush()
     cache[name] = cat.id
@@ -192,12 +226,19 @@ def import_csv():
                 ledger.monthly_budget = int(row[2])
             elif row[0] == '#CATEGORY_ROW' and len(row) >= 5:
                 cat = Category.query.filter_by(ledger_id=user.ledger_id, name=row[1]).first()
+                is_new = not cat
                 if not cat:
                     cat = Category(ledger_id=user.ledger_id, name=row[1])
                     db.session.add(cat)
                 cat.is_default = bool(int(row[2]))
                 cat.budget = int(row[3])
                 cat.sort_order = int(row[4])
+                # color는 이후에 추가된 컬럼이라 예전 백업 파일엔 없을 수 있다 (그때는 새 분류에만 랜덤 배정)
+                if len(row) >= 6 and row[5]:
+                    cat.color = row[5]
+                elif is_new:
+                    existing_colors = [c.color for c in Category.query.filter_by(ledger_id=user.ledger_id).all() if c.color]
+                    cat.color = pick_random_color(existing_colors)
                 db.session.flush()
                 cats_cache[cat.name] = cat.id
             elif row[0] == '#TX_ROW' and len(row) >= 11:

@@ -256,7 +256,7 @@
                     html += `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-bottom: 1px solid var(--color-line);">
                         <div style="flex:1;">
-                            <div style="font-size:12px; color:var(--color-secondary); margin-bottom:4px;">${tx.time} | 🧑 ${tx.transactor} | 🏷️ ${tx.category}</div>
+                            <div style="font-size:12px; color:var(--color-secondary); margin-bottom:4px; display:flex; align-items:center; gap:4px;">${tx.time} | <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tx.transactor_color};"></span>${tx.transactor} | 🏷️ ${tx.category}</div>
                             <div style="font-weight:700; font-size:15px;">${tx.title} ${tx.exclude_analysis ? '<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px;">분석제외</span>' : ''}${tx.exclude_budget ? '<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">예산제외</span>' : ''}</div>
                             ${tx.memo ? `<div style="font-size:12px; color:var(--color-muted); margin-top:4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block;">${tx.memo}</div>` : ''}
                         </div>
@@ -390,26 +390,49 @@
         
         // 분류 모달 조작 함수 통합
         window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
+        const CAT_COLOR_PALETTE = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
+        window.toggleCatColorPicker = function(id) {
+            const el = document.getElementById(`cat-color-picker-${id}`);
+            if (!el) return;
+            if (el.style.display === 'flex') { el.style.display = 'none'; return; }
+            const cat = window.catDataById ? window.catDataById[id] : null;
+            const current = cat ? cat.color : null;
+            el.innerHTML = CAT_COLOR_PALETTE.map(c => `<button type="button" onclick="window.setCatColor(${id}, '${c}')" style="width:22px;height:22px;border-radius:50%;background:${c};border:${c === current ? '2px solid var(--color-foreground)' : '2px solid transparent'};padding:0;cursor:pointer;"></button>`).join('');
+            el.style.display = 'flex';
+        };
+        window.setCatColor = async function(id, color) {
+            try {
+                const res = await fetch(`/api/category/${id}/set_color`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({color})});
+                if (!res.ok) throw new Error();
+                window.loadCategories();
+            } catch(err) { window.showToast('색상 변경에 실패했습니다.', 'error'); }
+        };
+
         window.loadCategories = async function() {
             const res = await fetch('/api/categories');
             const cats = await res.json();
+            window.catDataById = {}; cats.forEach(c => window.catDataById[c.id] = c);
             const editableCats = cats.filter(c => c.name !== '미분류');
             const uncat = cats.find(c => c.name === '미분류');
-            
+
             const list = document.getElementById('cat-list');
             list.innerHTML = editableCats.map(c => `
-                <div style="display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--color-line); align-items: center;">
-                    <div style="flex:1;">
-                        <input type="text" id="cat-name-${c.id}" value="${c.name}" class="input-field" style="display:none; padding:4px 8px; width:120px;">
-                        <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${c.name}</span>
+                <div style="padding: 12px 0; border-bottom: 1px solid var(--color-line);">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display:flex; align-items:center; gap:8px; flex:1;">
+                            <button type="button" onclick="window.toggleCatColorPicker(${c.id})" title="색상 변경" style="width:18px; height:18px; border-radius:50%; background:${c.color || '#9fa4b0'}; border:none; cursor:pointer; padding:0; flex-shrink:0;"></button>
+                            <input type="text" id="cat-name-${c.id}" value="${c.name}" class="input-field" style="display:none; padding:4px 8px; width:120px;">
+                            <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${c.name}</span>
+                        </div>
+                        <div style="display:flex; gap: 4px; align-items:center;">
+                            <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
+                            <button type="button" onclick="window.moveCat(${c.id}, 'down')" style="background:none;border:none;font-size:14px;cursor:pointer;">▼</button>
+                            <button type="button" id="cat-edit-btn-${c.id}" class="chip" onclick="window.enableEdit(${c.id})" style="padding:4px 8px;font-size:12px;">수정</button>
+                            <button type="button" id="cat-save-btn-${c.id}" class="chip" onclick="window.saveCat(${c.id})" style="display:none; background:var(--color-action); color:#fff; padding:4px 8px;font-size:12px;">저장</button>
+                            <button type="button" onclick="window.deleteCat(${c.id})" style="background:none;border:none;color:var(--color-danger);font-size:12px;padding:4px;cursor:pointer;">삭제</button>
+                        </div>
                     </div>
-                    <div style="display:flex; gap: 4px; align-items:center;">
-                        <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
-                        <button type="button" onclick="window.moveCat(${c.id}, 'down')" style="background:none;border:none;font-size:14px;cursor:pointer;">▼</button>
-                        <button type="button" id="cat-edit-btn-${c.id}" class="chip" onclick="window.enableEdit(${c.id})" style="padding:4px 8px;font-size:12px;">수정</button>
-                        <button type="button" id="cat-save-btn-${c.id}" class="chip" onclick="window.saveCat(${c.id})" style="display:none; background:var(--color-action); color:#fff; padding:4px 8px;font-size:12px;">저장</button>
-                        <button type="button" onclick="window.deleteCat(${c.id})" style="background:none;border:none;color:var(--color-danger);font-size:12px;padding:4px;cursor:pointer;">삭제</button>
-                    </div>
+                    <div id="cat-color-picker-${c.id}" style="display:none; gap:6px; flex-wrap:wrap; padding-top:10px; padding-left:26px;"></div>
                 </div>
             `).join('');
 

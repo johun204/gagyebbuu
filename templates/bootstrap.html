@@ -19,7 +19,9 @@
         }
         body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
         .splash-logo { width: 56px; height: 56px; border-radius: 14px; }
+        .splash-wordmark-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
         .splash-wordmark { color: var(--color-foreground); font-size: 16px; font-weight: 800; letter-spacing: 0.3px; }
+        .splash-ledger-name { color: var(--color-secondary); font-size: 12px; }
         .splash-progress-track { width: 140px; height: 4px; border-radius: 2px; background: var(--color-line); overflow: hidden; margin-top: 4px; }
         .splash-progress-fill { width: 0%; height: 100%; background: var(--color-action); border-radius: 2px; transition: width 0.25s ease; }
 
@@ -70,12 +72,22 @@
 
             window.__gbToken = token;
             window.__gbTargetUrl = window.location.origin + targetPath;
+            window.__gbLedgerName = localStorage.getItem('gb_ledger_name') || '';
         })();
     </script>
 
     <img src="/static/icon-192.png" alt="가계쀼" class="splash-logo">
-    <div class="splash-wordmark">가계쀼</div>
+    <div class="splash-wordmark-wrap">
+        <div class="splash-wordmark">가계쀼</div>
+        <div class="splash-ledger-name" id="splash-ledger-name"></div>
+    </div>
     <div class="splash-progress-track"><div class="splash-progress-fill" id="splash-progress"></div></div>
+    <script>
+        (function() {
+            var name = window.__gbLedgerName;
+            if (name) document.getElementById('splash-ledger-name').textContent = name;
+        })();
+    </script>
 
     <dialog id="db-error-dialog">
         <div style="text-align: center; padding: 10px 0;">

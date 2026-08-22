@@ -9,6 +9,7 @@ class Ledger(db.Model):
     name = db.Column(db.String(100), nullable=False)
     invite_hash = db.Column(db.String(36), unique=True, default=lambda: str(uuid.uuid4()))
     monthly_budget = db.Column(db.Integer, default=0)
+    together_color = db.Column(db.String(7), nullable=True)  # '함께' 거래자를 나타내는 색상
     users = db.relationship('User', backref='ledger', lazy=True)
 
 class User(db.Model):
@@ -16,6 +17,7 @@ class User(db.Model):
     kakao_id = db.Column(db.String(100), unique=True, nullable=False)
     nickname = db.Column(db.String(100), nullable=False)
     ledger_id = db.Column(db.Integer, db.ForeignKey('ledger.id'), nullable=True)
+    color = db.Column(db.String(7), nullable=True)  # 프로필 색상 (가계부 참여 시 랜덤 배정)
 
 class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -24,6 +26,7 @@ class Category(db.Model):
     is_default = db.Column(db.Boolean, default=False)
     budget = db.Column(db.Integer, default=0)
     sort_order = db.Column(db.Integer, default=0)
+    color = db.Column(db.String(7), nullable=True)  # 분류 색상 (첫 배정 시 랜덤)
 
 class Transaction(db.Model):
     __table_args__ = (

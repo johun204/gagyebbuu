@@ -3,12 +3,15 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from sqlalchemy.orm import joinedload
 
 from models import User, Ledger, Category, Transaction
-from helpers import spa_redirect, get_target_date, month_range
+from helpers import spa_redirect, get_target_date, month_range, FALLBACK_COLOR
 
 calendar_bp = Blueprint('calendar', __name__)
 
 
 def build_calendar_data(ledger_id, y, m):
+    ledger = Ledger.query.get(ledger_id)
+    user_color_by_nickname = {u.nickname: u.color for u in ledger.users}
+
     start, end = month_range(y, m)
     txs = Transaction.query.options(joinedload(Transaction.category)).filter(
         Transaction.ledger_id == ledger_id,
@@ -28,8 +31,11 @@ def build_calendar_data(ledger_id, y, m):
         if tx.tx_type == '수입': daily_totals[d_str]['income'] += tx.amount
         else: daily_totals[d_str]['expense'] += tx.amount
 
+        transactor_color = ledger.together_color if tx.transactor == '함께' else user_color_by_nickname.get(tx.transactor)
+
         tx_by_date[d_str].append({
             'id': tx.id, 'tx_type': tx.tx_type, 'title': tx.title, 'transactor': tx.transactor,
+            'transactor_color': transactor_color or FALLBACK_COLOR,
             'amount': tx.amount, 'category': tx.category.name, 'time': tx.datetime_val.strftime('%H:%M'),
             'memo': tx.memo,
             'exclude_analysis': tx.exclude_analysis,

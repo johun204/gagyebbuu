@@ -3,11 +3,9 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from sqlalchemy.orm import joinedload
 
 from models import User, Ledger, Category, Transaction
-from helpers import spa_redirect, get_target_date, month_range
+from helpers import spa_redirect, get_target_date, month_range, FALLBACK_COLOR
 
 home_bp = Blueprint('home', __name__)
-
-THEME_COLORS = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0']
 
 
 def _aggregate_expenses(txs, cat_names, days_in_month):
@@ -62,10 +60,16 @@ def build_home_data(user_id, y, m):
     cat_expense_total, dow_expense_by_cat, day_expense_by_cat, _, _ = _aggregate_expenses(analysis_txs, cat_names, days_in_month)
     budget_cat_total, _, _, cat_payer_expense, payer_expense = _aggregate_expenses(budget_txs, cat_names, days_in_month)
 
-    # 최근 거래자 순서가 아니라 이름순으로 고정 배정해야 매번 접속할 때 색이 바뀌지 않는다
+    # 참여자/'함께'는 마이페이지에서 고른 색상을, 분류는 분류 관리에서 고른 색상을 그대로 사용한다.
+    user_color_by_nickname = {u.nickname: u.color for u in ledger.users}
     payer_color_map = {}
-    for i, t in enumerate(sorted(payer_expense.keys())):
-        payer_color_map[t] = THEME_COLORS[(i + 4) % len(THEME_COLORS)]
+    for t in payer_expense.keys():
+        if t == '함께':
+            payer_color_map[t] = ledger.together_color or FALLBACK_COLOR
+        else:
+            payer_color_map[t] = user_color_by_nickname.get(t) or FALLBACK_COLOR
+
+    cat_color_map = {c.name: c.color or FALLBACK_COLOR for c in categories}
 
     budget_status = []
     for c in categories:
@@ -92,7 +96,8 @@ def build_home_data(user_id, y, m):
         'payer_color_map': payer_color_map,
         'cat_expense_total': cat_expense_total,
         'dow_expense_by_cat': dow_expense_by_cat,
-        'day_expense_by_cat': day_expense_by_cat
+        'day_expense_by_cat': day_expense_by_cat,
+        'cat_color_map': cat_color_map
     }
 
 

@@ -197,6 +197,11 @@
         window.setTransactor = function(btn) {
             window.syncTransactorGroup(btn.parentElement, btn.dataset.value);
         };
+
+        {% if ledger %}
+        // 부팅 화면에서 가계부 이름을 보여줄 수 있도록 캐시해둔다.
+        localStorage.setItem('gb_ledger_name', {{ ledger.name | tojson }});
+        {% endif %}
     </script>
 
     <main id="app-content">{% block content %}{% endblock %}</main>
@@ -319,6 +324,7 @@
         };
 
         const skeletonHome = `
+            <div class="skeleton skeleton-text short" style="height:14px; margin:0 auto 4px; width:80px;"></div>
             <div class="month-selector"><a href="#" class="no-spa" style="visibility:hidden;"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a><h3><div class="skeleton skeleton-text short" style="margin:0 auto;height:24px;"></div></h3><a href="#" class="no-spa" style="visibility:hidden;"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></a></div>
             <div class="card">
                 <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>

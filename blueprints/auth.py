@@ -6,7 +6,15 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 
 import config
 from models import db, User, Ledger, Category, Transaction, Notification
-from helpers import spa_redirect, get_kakao_redirect_uri
+from helpers import spa_redirect, get_kakao_redirect_uri, pick_random_color
+
+
+def _assign_join_color(user, ledger):
+    """가계부에 참여하는 사용자에게 기존 참여자/'함께' 색상과 겹치지 않는 랜덤 색상을 배정한다."""
+    existing = [u.color for u in ledger.users if u.color]
+    if ledger.together_color:
+        existing.append(ledger.together_color)
+    user.color = pick_random_color(existing)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -76,16 +84,22 @@ def onboarding():
         action = request.form.get('action')
 
         if action == 'create':
-            new_ledger = Ledger(name=request.form.get('ledger_name'))
+            new_ledger = Ledger(name=request.form.get('ledger_name'), together_color=pick_random_color([]))
             db.session.add(new_ledger)
             db.session.flush()
 
-            db.session.add(Category(ledger_id=new_ledger.id, name='미분류', is_default=True, sort_order=-1))
+            used_colors = [new_ledger.together_color]
+            uncat_color = pick_random_color(used_colors)
+            used_colors.append(uncat_color)
+            db.session.add(Category(ledger_id=new_ledger.id, name='미분류', is_default=True, sort_order=-1, color=uncat_color))
             default_cats = ['급여', '용돈', '외식비', '교통/차량', '마트', '문화생활', '주거', '통신']
             for i, cat_name in enumerate(default_cats):
-                db.session.add(Category(ledger_id=new_ledger.id, name=cat_name, is_default=True, sort_order=i+1))
+                cat_color = pick_random_color(used_colors)
+                used_colors.append(cat_color)
+                db.session.add(Category(ledger_id=new_ledger.id, name=cat_name, is_default=True, sort_order=i+1, color=cat_color))
 
             user.ledger_id = new_ledger.id
+            user.color = pick_random_color([new_ledger.together_color])
             db.session.commit()
             return spa_redirect(url_for('home.home'))
 
@@ -93,6 +107,7 @@ def onboarding():
             invite_code = request.form.get('invite_code', '').strip()
             ledger = Ledger.query.filter_by(invite_hash=invite_code).first()
             if ledger and len(ledger.users) < 2:
+                _assign_join_color(user, ledger)
                 user.ledger_id = ledger.id
                 db.session.commit()
                 return spa_redirect(url_for('home.home'))
@@ -112,6 +127,7 @@ def invite_process():
 
     ledger = Ledger.query.filter_by(invite_hash=hash).first()
     if ledger and len(ledger.users) < 2:
+        _assign_join_color(user, ledger)
         user.ledger_id = ledger.id
         db.session.commit()
         return "<script>localStorage.removeItem('pending_invite'); window.location.href='/home';</script>"
@@ -128,6 +144,7 @@ def invite(hash):
 
     ledger = Ledger.query.filter_by(invite_hash=hash).first()
     if ledger and len(ledger.users) < 2:
+        _assign_join_color(user, ledger)
         user.ledger_id = ledger.id
         db.session.commit()
         return redirect(url_for('home.home'))

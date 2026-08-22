@@ -6,6 +6,7 @@
     .home-slide { width: 33.333%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
 </style>
 
+<div style="text-align: center; font-size: 12px; font-weight: 700; color: var(--color-muted); margin-bottom: 4px;">{{ ledger.name }}</div>
 <div class="month-selector">
     <a href="javascript:void(0)" onclick="window.shiftHomeMonth(-1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a>
     <!-- 월 선택 다이얼로그 연동 -->
@@ -196,14 +197,11 @@
             if(window.appCharts['day_'+uid]) window.appCharts['day_'+uid].destroy();
             if(window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
 
-            const themeColors = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
-            // 색상은 카테고리의 고정 순서(sort_order) 기준 인덱스로 배정한다.
-            // 그 달에 지출이 없는 카테고리는 필터링되지만, 색 인덱스는 전체 목록 기준 위치를 그대로 쓰기 때문에
-            // 활성 카테고리 구성이 달마다 달라져도 같은 카테고리는 항상 같은 색을 유지한다.
+            // 분류 색상은 마이페이지/분류 관리에서 고른 실제 색상을 그대로 사용한다.
             const allCatNames = Object.keys(data.cat_expense_total);
             const activeCats = allCatNames.filter(k => data.cat_expense_total[k] > 0);
             const catDataArr = activeCats.map(k => data.cat_expense_total[k]);
-            const catColors = activeCats.map(k => themeColors[allCatNames.indexOf(k) % themeColors.length]);
+            const catColors = activeCats.map(k => data.cat_color_map[k] || '#9fa4b0');
 
             const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
             const datasets = activeCats.map((cat, i) => { return { label: cat, data: data.dow_expense_by_cat[cat], backgroundColor: catColors[i] }; });
