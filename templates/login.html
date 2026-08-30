@@ -15,4 +15,13 @@
         카카오로 시작하기
     </a>
 </div>
+<script>
+    // 로그인 화면에서는 만료됐을 수 있는 인증 토큰을 항상 초기화한다.
+    localStorage.removeItem('jwt_token');
+    {% if auth_error %}
+    // 인증키(state) 불일치 등으로 로그인이 실패했을 때 안내 토스트를 띄우고 URL을 정리한다.
+    if (window.showToast) window.showToast('로그인에 실패했어요. 다시 시도해주세요.', 'error');
+    history.replaceState(null, '', '/login');
+    {% endif %}
+</script>
 {% endblock %}

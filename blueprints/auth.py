@@ -2,11 +2,31 @@ import secrets
 import jwt
 import requests
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, render_template, request, redirect, url_for
+from itsdangerous import URLSafeTimedSerializer, BadData
 
 import config
 from models import db, User, Ledger, Category, Transaction, Notification
 from helpers import spa_redirect, get_kakao_redirect_uri, pick_random_color
+
+# OAuth CSRF용 state를 서버 세션(쿠키) 대신 SECRET_KEY로 서명한 무상태 토큰으로 발급한다.
+# 서버리스/PWA 캐시 환경에서 세션 쿠키가 왕복되지 않아 로그인 루프가 생기던 문제를 막기 위함.
+_state_serializer = URLSafeTimedSerializer(config.SECRET_KEY, salt='kakao-oauth-state')
+_STATE_MAX_AGE = 600  # 10분
+
+
+def _make_oauth_state():
+    return _state_serializer.dumps(secrets.token_urlsafe(8))
+
+
+def _valid_oauth_state(value):
+    if not value:
+        return False
+    try:
+        _state_serializer.loads(value, max_age=_STATE_MAX_AGE)
+        return True
+    except BadData:
+        return False
 
 
 def _assign_join_color(user, ledger):
@@ -21,9 +41,9 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.route('/login')
 def login():
-    state = secrets.token_urlsafe(16)
-    session['oauth_state'] = state
-    return render_template('login.html', client_id=config.KAKAO_CLIENT_ID, redirect_uri=get_kakao_redirect_uri(), state=state)
+    state = _make_oauth_state()
+    return render_template('login.html', client_id=config.KAKAO_CLIENT_ID, redirect_uri=get_kakao_redirect_uri(),
+                           state=state, auth_error=request.args.get('err') == 'auth')
 
 
 @auth_bp.route('/logout')
@@ -40,13 +60,12 @@ def logout():
 
 @auth_bp.route('/oauth/kakao/callback')
 def kakao_callback():
-    if request.args.get('error'): return redirect(url_for('auth.login'))
+    if request.args.get('error'): return redirect(url_for('auth.login', err='auth'))
     code = request.args.get('code')
-    if not code: return redirect(url_for('auth.login'))
+    if not code: return redirect(url_for('auth.login', err='auth'))
 
-    expected_state = session.pop('oauth_state', None)
-    if not expected_state or request.args.get('state') != expected_state:
-        return redirect(url_for('auth.login'))
+    if not _valid_oauth_state(request.args.get('state')):
+        return redirect(url_for('auth.login', err='auth'))
 
     token_url = "https://kauth.kakao.com/oauth/token"
     token_data = {
@@ -57,7 +76,7 @@ def kakao_callback():
 
     token_res = requests.post(token_url, data=token_data, headers={"Content-type": "application/x-www-form-urlencoded;charset=utf-8"}).json()
     access_token = token_res.get('access_token')
-    if not access_token: return redirect(url_for('auth.login'))
+    if not access_token: return redirect(url_for('auth.login', err='auth'))
 
     user_info = requests.get("https://kapi.kakao.com/v2/user/me", headers={"Authorization": f"Bearer {access_token}"}).json()
     kakao_id = str(user_info.get('id'))

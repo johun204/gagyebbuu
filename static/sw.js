@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v4';
+const CACHE_NAME = 'gagye-bbu-cache-v5';
 const STATIC_URLS = [
     '/',
     '/home',
@@ -63,6 +63,13 @@ self.addEventListener('fetch', event => {
 
     // API 통신은 캐시하지 않고 항상 네트워크 요청
     if (event.request.url.includes('/api/')) {
+        return;
+    }
+
+    // 로그인/OAuth 콜백/로그아웃은 캐시하면 안 된다. 캐시된 /login 이 오래된 state 를
+    // 담고 있으면 카카오 콜백에서 인증키가 계속 어긋나 로그인 루프에 빠진다.
+    const path = new URL(event.request.url).pathname;
+    if (path === '/login' || path === '/logout' || path.startsWith('/oauth/')) {
         return;
     }
 
