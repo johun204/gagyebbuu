@@ -97,7 +97,7 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" inputmode="numeric" id="edit_amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
+            <div class="input-wrapper"><input type="text" inputmode="numeric" autocomplete="off" id="edit_amount_input" name="amount" class="input-field" placeholder="지출 금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
 
         <div id="edit-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -109,17 +109,13 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" id="edit_title_input" name="title" class="input-field" placeholder="제목" required></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_title_input" name="title" class="input-field" placeholder="제목" required></div>
         </div>
 
         <div class="flex-row">
             <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <select name="category_id" id="edit_category_select" class="input-field" style="flex: 1;">
-                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
-                    {% for cat in categories if cat.name != '미분류' %}
-                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                    {% endfor %}
-                </select>
+                <input type="hidden" name="category_id" id="edit_category_select" value="{{ uncat.id if uncat else '' }}">
+                <button type="button" id="edit_category_btn" class="input-field txcat-btn" style="flex: 1;">미분류</button>
                 <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
         </div>
@@ -133,7 +129,7 @@
         </div>
 
         <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" id="edit_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
         </div>
 
         <div class="flex-row" style="margin-bottom: 8px;">
@@ -351,7 +347,6 @@
             const cats = await res.json();
             window.catDataById = {}; cats.forEach(c => window.catDataById[c.id] = c);
             const editableCats = cats.filter(c => c.name !== '미분류');
-            const uncat = cats.find(c => c.name === '미분류');
 
             const list = document.getElementById('cat-list');
             if(list) {
@@ -376,11 +371,7 @@
                 `).join('');
             }
 
-            const editSelect = document.getElementById('edit_category_select');
-            const evalue = editSelect ? editSelect.value : '';
-            const editHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            if(editSelect) { editSelect.innerHTML = editHtml; editSelect.value = evalue; }
-
+            // 등록·수정 시트의 분류 선택은 팝업 레이어(txsuggest.js)로 대체됨.
             const searchSelect = document.getElementById('search_category_select');
             const svalue = searchSelect ? searchSelect.value : '';
             const searchHtml = `<option value="">전체 분류</option>` + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
@@ -441,7 +432,7 @@
             document.getElementById('edit_amount_input').value = '';
             window.syncTransactorGroup(document.getElementById('edit-transactor-group'), window.currentUserNickname);
             document.getElementById('edit_title_input').value = '';
-            document.getElementById('edit_category_select').value = document.querySelector('#edit_category_select option').value;
+            if (window.txTxSuggest) window.txTxSuggest.reset();
 
             const now = new Date();
             const y = now.getFullYear(), m = String(now.getMonth()+1).padStart(2,'0'), d = String(now.getDate()).padStart(2,'0');
@@ -468,7 +459,7 @@
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
             window.syncTransactorGroup(document.getElementById('edit-transactor-group'), tx.transactor);
             document.getElementById('edit_title_input').value = tx.title;
-            document.getElementById('edit_category_select').value = tx.category_id || document.querySelector('#edit_category_select option').value;
+            if (window.txTxSuggest) window.txTxSuggest.setCategoryId(tx.category_id);
             document.getElementById('edit_date_input').value = tx.date;
             document.getElementById('edit_time_input').value = tx.time;
             document.getElementById('time_picker_input_edit').value = tx.time;
@@ -524,5 +515,14 @@
             }
         };
     }
+</script>
+<script>
+    window.txTxSuggest = window.initTxSuggest({
+        amountInput: document.getElementById('edit_amount_input'),
+        titleInput: document.getElementById('edit_title_input'),
+        txTypeInput: document.getElementById('edit_tx_type'),
+        catValueInput: document.getElementById('edit_category_select'),
+        catButton: document.getElementById('edit_category_btn'),
+    });
 </script>
 {% endblock %}

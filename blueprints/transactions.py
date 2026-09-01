@@ -8,6 +8,34 @@ from blueprints.push import notify_partner
 
 transactions_bp = Blueprint('transactions', __name__)
 
+# 자동 분류 추정에 사용하는 과거 조회 기간
+_SUGGEST_DAYS = 90
+
+
+def suggest_category_id(ledger_id, tx_type, title, amount, uncat_id, before_dt=None):
+    """최근 3개월 내역에서 분류를 추정한다.
+    1순위: 제목+금액이 모두 일치하는 가장 최근 내역
+    2순위: 제목만 일치하는 가장 최근 내역
+    추정 실패 시 None."""
+    if not title:
+        return None
+    before_dt = before_dt or datetime.now()
+    since = before_dt - timedelta(days=_SUGGEST_DAYS)
+    base = Transaction.query.filter(
+        Transaction.ledger_id == ledger_id,
+        Transaction.tx_type == tx_type,
+        Transaction.title == title,
+        Transaction.category_id != uncat_id,
+        Transaction.datetime_val >= since,
+        Transaction.datetime_val <= before_dt,
+    )
+    if amount is not None:
+        p1 = base.filter(Transaction.amount == amount).order_by(Transaction.datetime_val.desc()).first()
+        if p1:
+            return p1.category_id
+    p2 = base.order_by(Transaction.datetime_val.desc()).first()
+    return p2.category_id if p2 else None
+
 
 @transactions_bp.route('/transactions')
 def transactions():
@@ -101,6 +129,70 @@ def api_transactions():
     return jsonify({'transactions': result, 'has_next': page * per_page < total_count, 'total_count': total_count})
 
 
+@transactions_bp.route('/api/title_suggest')
+def api_title_suggest():
+    """입력된 금액과 동일하게 지출/수입한 최근 3개월 내역의 제목을 최근순 최대 3건 반환."""
+    user = User.query.get(request.user_id)
+    if not user or not user.ledger_id:
+        return jsonify([])
+    amt = request.args.get('amount', '').replace(',', '')
+    if not amt.isdigit():
+        return jsonify([])
+    tx_type = request.args.get('tx_type', '지출')
+    since = datetime.now() - timedelta(days=_SUGGEST_DAYS)
+    rows = Transaction.query.filter(
+        Transaction.ledger_id == user.ledger_id,
+        Transaction.tx_type == tx_type,
+        Transaction.amount == int(amt),
+        Transaction.datetime_val >= since,
+    ).order_by(Transaction.datetime_val.desc()).limit(50).all()
+
+    seen, titles = set(), []
+    for r in rows:
+        if r.title and r.title not in seen:
+            seen.add(r.title)
+            titles.append(r.title)
+        if len(titles) == 3:
+            break
+    return jsonify(titles)
+
+
+@transactions_bp.route('/api/category_suggest')
+def api_category_suggest():
+    """분류 선택 팝업용. 입력 정보 기준 자동분류 유력 후보 순으로 정렬한 분류 목록을 반환."""
+    user = User.query.get(request.user_id)
+    if not user or not user.ledger_id:
+        return jsonify({'items': [], 'matched_id': None})
+
+    cats = Category.query.filter_by(ledger_id=user.ledger_id) \
+        .order_by(Category.sort_order.asc(), Category.id.asc()).all()
+    uncat = next((c for c in cats if c.name == '미분류'), None)
+    uncat_id = uncat.id if uncat else None
+
+    title = (request.args.get('title') or '').strip()
+    amt = request.args.get('amount', '').replace(',', '')
+    tx_type = request.args.get('tx_type', '지출')
+    matched_id = suggest_category_id(user.ledger_id, tx_type, title,
+                                    int(amt) if amt.isdigit() else None, uncat_id)
+
+    ordered, added = [], set()
+    if matched_id:
+        c = next((c for c in cats if c.id == matched_id), None)
+        if c:
+            ordered.append(c); added.add(c.id)
+    for c in cats:
+        if c.id in added or (uncat and c.id == uncat.id):
+            continue
+        ordered.append(c); added.add(c.id)
+    if uncat:
+        ordered.append(uncat)
+
+    return jsonify({
+        'items': [{'id': c.id, 'name': c.name, 'color': c.color} for c in ordered],
+        'matched_id': matched_id,
+    })
+
+
 @transactions_bp.route('/transaction', methods=['POST'])
 def add_transaction():
     user = User.query.get(request.user_id)
@@ -116,25 +208,14 @@ def add_transaction():
     uncategorized_id = get_or_create_uncategorized(user.ledger_id)
 
     if tx_type == '지출' and (not cat_id or int(cat_id) == uncategorized_id):
-        sixty_days_ago = dt - timedelta(days=60)
-        past_tx = Transaction.query.filter(
-            Transaction.ledger_id == user.ledger_id,
-            Transaction.tx_type == tx_type,
-            Transaction.transactor == transactor,
-            Transaction.title == title,
-            Transaction.amount == amount,
-            Transaction.category_id != uncategorized_id,
-            Transaction.datetime_val >= sixty_days_ago,
-            Transaction.datetime_val <= dt
-        ).order_by(Transaction.datetime_val.desc()).first()
-
-        if past_tx:
-            cat_id = past_tx.category_id
-        else:
-            cat_id = uncategorized_id
+        cat_id = suggest_category_id(user.ledger_id, tx_type, title, amount, uncategorized_id, before_dt=dt) or uncategorized_id
     else:
         if not cat_id:
             cat_id = uncategorized_id
+
+    # 팝업에서 고른 분류가 그 사이 삭제됐을 수 있으니 소속 가계부의 분류인지 확인
+    if not Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first():
+        cat_id = uncategorized_id
 
     new_tx = Transaction(
         ledger_id=user.ledger_id, user_id=user.id,
@@ -176,7 +257,8 @@ def edit_transaction(tx_id):
         tx.exclude_budget = (request.form.get('exclude_budget') == 'on')
 
         cat_id = request.form.get('category_id')
-        if not cat_id: cat_id = get_or_create_uncategorized(user.ledger_id)
+        if not cat_id or not Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first():
+            cat_id = get_or_create_uncategorized(user.ledger_id)
         tx.category_id = cat_id
 
         tx.datetime_val = datetime.strptime(f"{request.form.get('date')} {request.form.get('time')}", "%Y-%m-%d %H:%M")

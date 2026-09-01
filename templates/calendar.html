@@ -60,7 +60,7 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" inputmode="numeric" id="cal_amount_input" name="amount" class="input-field" placeholder="금액(원)" oninput="window.formatNumber(this)" required></div>
+            <div class="input-wrapper"><input type="text" inputmode="numeric" autocomplete="off" id="cal_amount_input" name="amount" class="input-field" placeholder="금액(원)" oninput="window.formatNumber(this)" required></div>
         </div>
         
         <div id="cal-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
@@ -72,17 +72,13 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" id="cal_title_input" name="title" class="input-field" placeholder="제목" required></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="cal_title_input" name="title" class="input-field" placeholder="제목" required></div>
         </div>
-        
+
         <div class="flex-row">
             <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <select name="category_id" id="cal_category_select" class="input-field" style="flex: 1;">
-                    <option value="{{ uncat.id if uncat else '' }}">미분류</option>
-                    {% for cat in categories if cat.name != '미분류' %}
-                        <option value="{{ cat.id }}">{{ cat.name }}</option>
-                    {% endfor %}
-                </select>
+                <input type="hidden" name="category_id" id="cal_category_select" value="{{ uncat.id if uncat else '' }}">
+                <button type="button" id="cal_category_btn" class="input-field txcat-btn" style="flex: 1;">미분류</button>
                 <!-- 내역 탭과 동일한 분류 편집 버튼 추가 -->
                 <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
             </div>
@@ -97,7 +93,7 @@
         </div>
         
         <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" id="cal_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택)"></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="cal_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택)"></div>
         </div>
 
         <div class="flex-row" style="margin-bottom: 8px;">
@@ -413,7 +409,6 @@
             const cats = await res.json();
             window.catDataById = {}; cats.forEach(c => window.catDataById[c.id] = c);
             const editableCats = cats.filter(c => c.name !== '미분류');
-            const uncat = cats.find(c => c.name === '미분류');
 
             const list = document.getElementById('cat-list');
             list.innerHTML = editableCats.map(c => `
@@ -435,12 +430,7 @@
                     <div id="cat-color-picker-${c.id}" style="display:none; gap:6px; flex-wrap:wrap; padding-top:10px; padding-left:26px;"></div>
                 </div>
             `).join('');
-
-            const select = document.getElementById('cal_category_select');
-            const val = select.value;
-            
-            let selectHtml = `<option value="${uncat ? uncat.id : ''}">미분류</option>` + editableCats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
-            select.innerHTML = selectHtml; select.value = val;
+            // 분류 선택은 팝업 레이어(txsuggest.js)로 대체됨. 여기서는 목록만 갱신한다.
         };
         window.addCat = async function() {
             const name = document.getElementById('new_cat_name').value; if (!name) return;
@@ -481,6 +471,7 @@
             document.getElementById('cal_amount_input').value = '';
             document.getElementById('cal_title_input').value = '';
             document.getElementById('cal_memo_input').value = '';
+            if (window.calTxSuggest) window.calTxSuggest.reset();
             document.getElementById('cal_date_input').value = window.selectedDate;
             document.getElementById('cal_exclude_analysis').checked = false;
             document.getElementById('cal_exclude_budget').checked = false;
@@ -498,7 +489,7 @@
             document.getElementById('cal_amount_input').value = tx.amount.toLocaleString();
             window.syncTransactorGroup(document.getElementById('cal-transactor-group'), tx.transactor);
             document.getElementById('cal_title_input').value = tx.title;
-            document.getElementById('cal_category_select').value = tx.category_id || document.querySelector('#cal_category_select option').value;
+            if (window.calTxSuggest) window.calTxSuggest.setCategoryId(tx.category_id);
             document.getElementById('cal_date_input').value = tx.date;
             document.getElementById('cal_time_input').value = tx.time;
             document.getElementById('cal_time_picker_input').value = tx.time;
@@ -560,5 +551,14 @@
             }
         };
     }
+</script>
+<script>
+    window.calTxSuggest = window.initTxSuggest({
+        amountInput: document.getElementById('cal_amount_input'),
+        titleInput: document.getElementById('cal_title_input'),
+        txTypeInput: document.getElementById('cal_tx_type'),
+        catValueInput: document.getElementById('cal_category_select'),
+        catButton: document.getElementById('cal_category_btn'),
+    });
 </script>
 {% endblock %}
