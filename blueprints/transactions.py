@@ -207,15 +207,20 @@ def add_transaction():
 
     uncategorized_id = get_or_create_uncategorized(user.ledger_id)
 
+    auto_assigned = False
     if tx_type == '지출' and (not cat_id or int(cat_id) == uncategorized_id):
-        cat_id = suggest_category_id(user.ledger_id, tx_type, title, amount, uncategorized_id, before_dt=dt) or uncategorized_id
+        suggested = suggest_category_id(user.ledger_id, tx_type, title, amount, uncategorized_id, before_dt=dt)
+        cat_id = suggested or uncategorized_id
+        auto_assigned = suggested is not None
     else:
         if not cat_id:
             cat_id = uncategorized_id
 
     # 팝업에서 고른 분류가 그 사이 삭제됐을 수 있으니 소속 가계부의 분류인지 확인
-    if not Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first():
+    cat = Category.query.filter_by(id=cat_id, ledger_id=user.ledger_id).first()
+    if not cat:
         cat_id = uncategorized_id
+        auto_assigned = False
 
     new_tx = Transaction(
         ledger_id=user.ledger_id, user_id=user.id,
@@ -232,7 +237,7 @@ def add_transaction():
                     f"{transactor}님이 '{title}' {amount:,}원을 등록했어요")
 
     if request.form.get('ajax') == '1':
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'auto_category': cat.name if auto_assigned else None})
 
     return spa_redirect(url_for('transactions.transactions'))
 
