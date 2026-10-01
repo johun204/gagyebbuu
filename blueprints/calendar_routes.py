@@ -1,20 +1,20 @@
+import calendar as py_calendar
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, g
 from sqlalchemy.orm import joinedload
 
-from models import User, Ledger, Category, Transaction
-from helpers import spa_redirect, get_target_date, month_range, FALLBACK_COLOR
+from models import Category, Transaction
+from helpers import get_target_date, month_range, require_ledger, json_error, parse_year_month, TransactorInfo
 
 calendar_bp = Blueprint('calendar', __name__)
 
 
-def build_calendar_data(ledger_id, y, m):
-    ledger = Ledger.query.get(ledger_id)
-    user_color_by_nickname = {u.nickname: u.color for u in ledger.users}
+def build_calendar_data(ledger, y, m):
+    tinfo = TransactorInfo(ledger)
 
     start, end = month_range(y, m)
     txs = Transaction.query.options(joinedload(Transaction.category)).filter(
-        Transaction.ledger_id == ledger_id,
+        Transaction.ledger_id == ledger.id,
         Transaction.datetime_val >= start,
         Transaction.datetime_val < end
     ).order_by(Transaction.datetime_val.desc(), Transaction.id.desc()).all()
@@ -31,11 +31,10 @@ def build_calendar_data(ledger_id, y, m):
         if tx.tx_type == '수입': daily_totals[d_str]['income'] += tx.amount
         else: daily_totals[d_str]['expense'] += tx.amount
 
-        transactor_color = ledger.together_color if tx.transactor == '함께' else user_color_by_nickname.get(tx.transactor)
-
         tx_by_date[d_str].append({
             'id': tx.id, 'tx_type': tx.tx_type, 'title': tx.title, 'transactor': tx.transactor,
-            'transactor_color': transactor_color or FALLBACK_COLOR,
+            'transactor_color': tinfo.color(tx),
+            'transactor_value': tinfo.form_value(tx),
             'amount': tx.amount, 'category': tx.category.name, 'time': tx.datetime_val.strftime('%H:%M'),
             'memo': tx.memo,
             'exclude_analysis': tx.exclude_analysis,
@@ -44,7 +43,6 @@ def build_calendar_data(ledger_id, y, m):
             'date': d_str
         })
 
-    import calendar as py_calendar
     cal = py_calendar.Calendar(firstweekday=6)
     month_days = cal.monthdayscalendar(y, m)
 
@@ -57,16 +55,14 @@ def build_calendar_data(ledger_id, y, m):
 
 
 @calendar_bp.route('/calendar')
+@require_ledger
 def calendar():
-    user = User.query.get(request.user_id)
-    if not user: return spa_redirect(url_for('auth.logout'))
-    if not user.ledger_id: return redirect(url_for('auth.onboarding'))
-    ledger = Ledger.query.get(user.ledger_id)
+    user, ledger = g.user, g.ledger
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
 
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     today_date = datetime.now().strftime('%Y-%m-%d')
-    initial_data = build_calendar_data(ledger.id, t_year, t_month)
+    initial_data = build_calendar_data(ledger, t_year, t_month)
 
     return render_template('calendar.html', ledger=ledger, current_user=user, categories=categories,
                            today_date=today_date, now=datetime.now(),
@@ -75,9 +71,9 @@ def calendar():
 
 
 @calendar_bp.route('/api/calendar_data')
+@require_ledger
 def api_calendar_data():
-    user = User.query.get(request.user_id)
-    if not user: return jsonify({'error': 'Unauthorized'}), 401
-    y = int(request.args.get('year'))
-    m = int(request.args.get('month'))
-    return jsonify(build_calendar_data(user.ledger_id, y, m))
+    ym = parse_year_month(request.args.get('year'), request.args.get('month'))
+    if not ym:
+        return json_error('연/월이 올바르지 않습니다.')
+    return jsonify(build_calendar_data(g.ledger, *ym))

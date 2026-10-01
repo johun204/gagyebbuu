@@ -87,7 +87,8 @@
             var b = document.createElement('button');
             b.type = 'button';
             b.className = 'txcat-chip' + (data.matched_id && c.id === data.matched_id ? ' suggested' : '');
-            b.innerHTML = (c.color ? '<span class="dot" style="background:' + c.color + ';"></span>' : '') +
+            var safeColor = /^#[0-9a-fA-F]{6}$/.test(c.color || '') ? c.color : null;
+            b.innerHTML = (safeColor ? '<span class="dot" style="background:' + safeColor + ';"></span>' : '') +
                 '<span>' + escapeHtml(c.name) + '</span>';
             b.addEventListener('click', function () {
                 inst.setCategoryId(c.id, c.name);

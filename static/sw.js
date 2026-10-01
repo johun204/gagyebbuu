@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v6';
+const CACHE_NAME = 'gagye-bbu-cache-v7';
 const STATIC_URLS = [
     '/',
     '/home',
@@ -72,6 +72,14 @@ self.addEventListener('fetch', event => {
     if (path === '/login' || path === '/logout' || path.startsWith('/oauth/')) {
         return;
     }
+    // 내보내기 CSV 는 개인 데이터 파일이라 캐시하지 않는다.
+    if (path === '/export') {
+        return;
+    }
+
+    // 정상 응답(2xx)만 캐시한다. 서버 오류 페이지가 캐시돼 오프라인/재실행 때 계속 보이는 문제 방지.
+    // (CDN 스크립트처럼 상태를 알 수 없는 opaque 응답은 기존처럼 캐시해 오프라인에서도 쓰이게 둔다)
+    const cacheable = response => response && (response.ok || response.type === 'opaque');
 
     if (event.request.mode === 'navigate') {
         // 최상위 페이지 진입(PWA 아이콘 실행, 새로고침)은 브라우저가 인증 헤더를 붙일 수 없어서
@@ -81,8 +89,10 @@ self.addEventListener('fetch', event => {
         event.respondWith(
             caches.match(event.request).then(cached => {
                 const network = fetch(event.request).then(response => {
-                    const resClone = response.clone();
-                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+                    if (cacheable(response)) {
+                        const resClone = response.clone();
+                        caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+                    }
                     return response;
                 }).catch(() => cached || caches.match('/'));
                 return cached || network;
@@ -94,8 +104,10 @@ self.addEventListener('fetch', event => {
     event.respondWith(
         fetch(event.request)
             .then(response => {
-                let resClone = response.clone();
-                caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+                if (cacheable(response)) {
+                    let resClone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(event.request, resClone));
+                }
                 return response;
             })
             .catch(() => {

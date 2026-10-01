@@ -17,6 +17,22 @@
     <script src="/static/txsuggest.js"></script>
     
     <script>
+        // 사용자가 입력한 글자(제목, 메모, 분류명, 닉네임 등)를 innerHTML 템플릿에 넣을 때는
+        // 반드시 escapeHtml 로 감싸야 한다. 그렇지 않으면 입력값의 <태그>가 그대로 실행된다(XSS).
+        window.escapeHtml = function(s) {
+            if (s === null || s === undefined) return '';
+            return String(s).replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+        };
+        // style 속성에 넣는 색상은 '#RRGGBB' 형식만 허용한다.
+        window.safeColor = function(c, fallback) {
+            return /^#[0-9a-fA-F]{6}$/.test(c || '') ? c : (fallback || '#9fa4b0');
+        };
+        // 서버가 돌려준 오류 메시지({error: ...})가 있으면 그것을, 없으면 기본 문구를 돌려준다.
+        window.readError = async function(res, fallback) {
+            try { const d = await res.clone().json(); if (d && d.error) return d.error; } catch (_) {}
+            return fallback;
+        };
+
         const originalFetch = window.fetch;
         window.fetch = async function(...args) {
             let [resource, config] = args;
@@ -506,6 +522,10 @@
                     if (data.redirect) {
                         return navigate(data.redirect);
                     }
+                    // 입력값 오류 등으로 이동할 곳이 없으면 안내 후 현재 화면을 다시 그린다
+                    // (스켈레톤 화면에 멈춰 있지 않도록).
+                    window.showToast(data.error || '처리하지 못했습니다. 다시 시도해주세요.', 'error');
+                    return navigate(window.location.pathname + window.location.search, false);
                 } else {
                     const html = await response.text();
                     applyDOM(html, response.url, true);

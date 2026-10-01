@@ -15,6 +15,9 @@ VAPID_CLAIM_EMAIL = os.environ.get('VAPID_CLAIM_EMAIL', 'mailto:admin@example.co
 
 def get_database_uri():
     db_url = os.environ.get("DATABASE_URL", "sqlite:///ledger.db")
-    if db_url.startswith("postgres://"):
-        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    # 설치된 드라이버(psycopg2)를 명시한다. SQLAlchemy 버전에 따라 postgresql:// 의 기본 드라이버가
+    # 달라질 수 있어서(2.1부터 psycopg3) 명시하지 않으면 배포 환경에 따라 DB 연결이 실패할 수 있다.
+    for prefix in ("postgres://", "postgresql://"):
+        if db_url.startswith(prefix):
+            return "postgresql+psycopg2://" + db_url[len(prefix):]
     return db_url

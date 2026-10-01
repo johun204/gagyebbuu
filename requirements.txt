@@ -1,5 +1,10 @@
 Flask==3.0.0
 Flask-SQLAlchemy==3.1.1
+# SQLAlchemy 2.1부터 postgresql:// 의 기본 드라이버가 psycopg(3)로 바뀌어, 버전을 고정하지 않으면
+# 새로 배포할 때 2.1이 설치되면서 DB 연결이 실패한다. 검증된 2.0.x 로 고정한다.
+SQLAlchemy==2.0.54
+Werkzeug==3.1.9
+itsdangerous==2.2.0
 PyJWT==2.8.0
 requests==2.31.0
 psycopg2-binary==2.9.9

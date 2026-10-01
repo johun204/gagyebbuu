@@ -1,15 +1,17 @@
 from calendar import monthrange
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, g
 from sqlalchemy.orm import joinedload
 
-from models import User, Ledger, Category, Transaction
-from helpers import spa_redirect, get_target_date, month_range, FALLBACK_COLOR
+from models import Category, Transaction
+from helpers import (get_target_date, month_range, require_ledger, json_error, parse_year_month,
+                     TransactorInfo, FALLBACK_COLOR, UNCATEGORIZED)
 
 home_bp = Blueprint('home', __name__)
 
 
-def _aggregate_expenses(txs, cat_names, days_in_month):
-    """지출 거래 목록에서 카테고리별/요일별/일별/참여자별 합계를 집계한다."""
+def _aggregate_expenses(txs, cat_names, days_in_month, payer_key):
+    """지출 거래 목록에서 카테고리별/요일별/일별/참여자별 합계를 집계한다.
+    payer_key(tx) 는 참여자별 집계에 쓸 이름 (닉네임이 바뀌어도 같은 사람은 하나로 묶임)."""
     dow_expense_by_cat = {c: [0]*7 for c in cat_names}
     day_expense_by_cat = {c: [0]*days_in_month for c in cat_names}
     cat_expense_total = {c: 0 for c in cat_names}
@@ -28,15 +30,14 @@ def _aggregate_expenses(txs, cat_names, days_in_month):
             cat_expense_total[c_name] += tx.amount
             dow_expense_by_cat[c_name][tx.datetime_val.weekday()] += tx.amount
             day_expense_by_cat[c_name][tx.datetime_val.day - 1] += tx.amount
-            cat_payer_expense[c_name][tx.transactor] = cat_payer_expense[c_name].get(tx.transactor, 0) + tx.amount
-            payer_expense[tx.transactor] = payer_expense.get(tx.transactor, 0) + tx.amount
+            payer = payer_key(tx)
+            cat_payer_expense[c_name][payer] = cat_payer_expense[c_name].get(payer, 0) + tx.amount
+            payer_expense[payer] = payer_expense.get(payer, 0) + tx.amount
 
     return cat_expense_total, dow_expense_by_cat, day_expense_by_cat, cat_payer_expense, payer_expense
 
 
-def build_home_data(user_id, y, m):
-    user = User.query.get(user_id)
-    ledger = Ledger.query.get(user.ledger_id)
+def build_home_data(ledger, y, m):
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     start, end = month_range(y, m)
     days_in_month = monthrange(y, m)[1]
@@ -57,29 +58,28 @@ def build_home_data(user_id, y, m):
     budget_expense = sum(tx.amount for tx in budget_txs if tx.tx_type == '지출')
 
     cat_names = [c.name for c in categories]
-    cat_expense_total, dow_expense_by_cat, day_expense_by_cat, _, _ = _aggregate_expenses(analysis_txs, cat_names, days_in_month)
-    budget_cat_total, _, _, cat_payer_expense, payer_expense = _aggregate_expenses(budget_txs, cat_names, days_in_month)
+    tinfo = TransactorInfo(ledger)
+    cat_expense_total, dow_expense_by_cat, day_expense_by_cat, _, _ = _aggregate_expenses(analysis_txs, cat_names, days_in_month, tinfo.key)
+    budget_cat_total, _, _, cat_payer_expense, payer_expense = _aggregate_expenses(budget_txs, cat_names, days_in_month, tinfo.key)
 
     # 참여자/'함께'는 마이페이지에서 고른 색상을, 분류는 분류 관리에서 고른 색상을 그대로 사용한다.
-    user_color_by_nickname = {u.nickname: u.color for u in ledger.users}
     payer_color_map = {}
-    for t in payer_expense.keys():
-        if t == '함께':
-            payer_color_map[t] = ledger.together_color or FALLBACK_COLOR
-        else:
-            payer_color_map[t] = user_color_by_nickname.get(t) or FALLBACK_COLOR
+    for tx in budget_txs:
+        if tx.tx_type == '지출':
+            payer_color_map.setdefault(tinfo.key(tx), tinfo.color(tx))
 
     cat_color_map = {c.name: c.color or FALLBACK_COLOR for c in categories}
 
     budget_status = []
     for c in categories:
-        if c.name != '미분류':
+        if c.name != UNCATEGORIZED:
             spent = budget_cat_total.get(c.name, 0)
-            if c.budget > 0 or spent > 0:
-                display_budget = c.budget if c.budget > 0 else spent
+            budget = c.budget or 0
+            if budget > 0 or spent > 0:
+                display_budget = budget if budget > 0 else spent
                 budget_status.append({
                     'name': c.name,
-                    'budget': c.budget,
+                    'budget': budget,
                     'display_budget': display_budget,
                     'spent': spent,
                     'payers': cat_payer_expense.get(c.name, {})
@@ -90,7 +90,7 @@ def build_home_data(user_id, y, m):
         'days_in_month': days_in_month,
         'monthly_income': monthly_income,
         'budget_expense': budget_expense,
-        'ledger_budget': ledger.monthly_budget,
+        'ledger_budget': ledger.monthly_budget or 0,
         'budget_status': budget_status,
         'payer_expense': payer_expense,
         'payer_color_map': payer_color_map,
@@ -103,14 +103,11 @@ def build_home_data(user_id, y, m):
 
 @home_bp.route('/')
 @home_bp.route('/home')
+@require_ledger
 def home():
-    user = User.query.get(request.user_id)
-    if not user: return spa_redirect(url_for('auth.logout'))
-    if not user.ledger_id: return redirect(url_for('auth.onboarding'))
-    ledger = Ledger.query.get(user.ledger_id)
-
+    ledger = g.ledger
     t_year, t_month, p_y, p_m, n_y, n_m = get_target_date()
-    initial_data = build_home_data(user.id, t_year, t_month)
+    initial_data = build_home_data(ledger, t_year, t_month)
 
     return render_template('home.html', ledger=ledger,
                            initial_data=initial_data,
@@ -118,7 +115,9 @@ def home():
 
 
 @home_bp.route('/api/home_data')
+@require_ledger
 def api_home_data():
-    y = int(request.args.get('year'))
-    m = int(request.args.get('month'))
-    return jsonify(build_home_data(request.user_id, y, m))
+    ym = parse_year_month(request.args.get('year'), request.args.get('month'))
+    if not ym:
+        return json_error('연/월이 올바르지 않습니다.')
+    return jsonify(build_home_data(g.ledger, *ym))
