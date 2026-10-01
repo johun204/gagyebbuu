@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v8';
+const CACHE_NAME = 'gagye-bbu-cache-v9';
 const STATIC_URLS = [
     '/',
     '/home',

@@ -25,6 +25,18 @@
                 if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
             } catch (e) {}
         })();
+        // 모바일 확대/당겨서 새로고침 방지
+        //  - 두 손가락 확대: iOS 사파리는 user-scalable=no 를 무시하므로 제스처 이벤트를 직접 막는다.
+        //  - 당겨서 새로고침/바운스: CSS overscroll-behavior 로 막는다 (아래 스타일).
+        (function() {
+            var stop = function(e) { e.preventDefault(); };
+            document.addEventListener('gesturestart', stop, { passive: false });
+            document.addEventListener('gesturechange', stop, { passive: false });
+            document.addEventListener('gestureend', stop, { passive: false });
+            document.addEventListener('touchmove', function(e) {
+                if (e.touches && e.touches.length > 1) e.preventDefault();
+            }, { passive: false });
+        })();
     </script>
     <script src="/static/vendor/chart-4.5.1.umd.min.js"></script>
     <script src="/static/txsuggest.js"></script>
@@ -135,8 +147,8 @@
             --line: #E6E8EE; --line-strong: #D5D8E0;
             --text: #16181D; --text-2: #4B5160; --text-3: #6B7280;
             --brand: #4F5BD5; --brand-strong: #3F4AC0; --brand-soft: #ECEEFD; --on-brand: #FFFFFF;
-            --income: #0A7F55; --income-soft: #E3F5EC; --expense: #D33A40; --expense-soft: #FDECEC;
-            --good: #0A7F55; --good-soft: #E3F5EC; --warning: #B45F00; --warning-soft: #FFF3E0;
+            --income: #4F5BD5; --income-soft: #ECEEFD; --expense: #D33A40; --expense-soft: #FDECEC;
+            --good: #4F5BD5; --good-soft: #ECEEFD; --warning: #B45F00; --warning-soft: #FFF3E0;
             --critical: #D33A40; --critical-soft: #FDECEC; --info: #4F5BD5; --info-soft: #ECEEFD;
             --track: #E8EAF0; --overlay: rgba(16, 18, 24, .45);
             --shadow: 0 1px 2px rgba(16,24,40,.04), 0 2px 8px rgba(16,24,40,.05);
@@ -158,8 +170,8 @@
                 --line: #2C303A; --line-strong: #3A3F4B;
                 --text: #F2F3F5; --text-2: #B6BBC6; --text-3: #8F95A3;
                 --brand: #8F98FF; --brand-strong: #A9B0FF; --brand-soft: #262A4A; --on-brand: #0F1115;
-                --income: #3DD68C; --income-soft: #15302A; --expense: #FF6B6E; --expense-soft: #3A1E22;
-                --good: #3DD68C; --good-soft: #15302A; --warning: #FFB547; --warning-soft: #3A2D16;
+                --income: #8F98FF; --income-soft: #262A4A; --expense: #FF6B6E; --expense-soft: #3A1E22;
+                --good: #8F98FF; --good-soft: #262A4A; --warning: #FFB547; --warning-soft: #3A2D16;
                 --critical: #FF6B6E; --critical-soft: #3A1E22; --info: #8F98FF; --info-soft: #262A4A;
                 --track: #2C313B; --overlay: rgba(0, 0, 0, .6);
                 --shadow: none; --shadow-lg: 0 -8px 30px rgba(0,0,0,.5);
@@ -171,14 +183,18 @@
             --line: #2C303A; --line-strong: #3A3F4B;
             --text: #F2F3F5; --text-2: #B6BBC6; --text-3: #8F95A3;
             --brand: #8F98FF; --brand-strong: #A9B0FF; --brand-soft: #262A4A; --on-brand: #0F1115;
-            --income: #3DD68C; --income-soft: #15302A; --expense: #FF6B6E; --expense-soft: #3A1E22;
-            --good: #3DD68C; --good-soft: #15302A; --warning: #FFB547; --warning-soft: #3A2D16;
+            --income: #8F98FF; --income-soft: #262A4A; --expense: #FF6B6E; --expense-soft: #3A1E22;
+            --good: #8F98FF; --good-soft: #262A4A; --warning: #FFB547; --warning-soft: #3A2D16;
             --critical: #FF6B6E; --critical-soft: #3A1E22; --info: #8F98FF; --info-soft: #262A4A;
             --track: #2C313B; --overlay: rgba(0, 0, 0, .6);
             --shadow: none; --shadow-lg: 0 -8px 30px rgba(0,0,0,.5);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+        /* 당겨서 새로고침·화면 끝 바운스 방지, 두 손가락 확대·더블탭 확대 방지 */
+        html, body { overscroll-behavior: none; }
+        html { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        a, button, input, select, textarea, label, [onclick] { touch-action: manipulation; }
         html { background: var(--bg); }
         body {
             font-family: var(--font-sans); background: var(--bg); color: var(--text); line-height: 1.5;
@@ -309,7 +325,7 @@
         .toast-container { position: fixed; top: calc(env(safe-area-inset-top) + 12px); left: 50%; transform: translateX(-50%); z-index: 10000; display: flex; flex-direction: column; gap: 8px; align-items: center; width: 92%; max-width: 420px; pointer-events: none; }
         .toast { background: var(--text); color: var(--bg); padding: 12px 18px; border-radius: var(--r-md); font-size: 14px; font-weight: 600; text-align: center; box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; transform: translateY(-12px); transition: opacity .25s ease, transform .25s ease; }
         .toast.show { opacity: 1; transform: translateY(0); }
-        .toast.toast-success { background: var(--good); color: #fff; }
+        .toast.toast-success { background: var(--brand); color: var(--on-brand); }
         .toast.toast-error { background: var(--critical); color: #fff; }
 
         /* ===== 로딩 스켈레톤 ===== */

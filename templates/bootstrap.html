@@ -14,6 +14,18 @@
     <meta name="theme-color" content="#F4F5F8">
     <script>
         (function() { try { var t = localStorage.getItem('gb_theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+        // 모바일 확대/당겨서 새로고침 방지
+        //  - 두 손가락 확대: iOS 사파리는 user-scalable=no 를 무시하므로 제스처 이벤트를 직접 막는다.
+        //  - 당겨서 새로고침/바운스: CSS overscroll-behavior 로 막는다 (아래 스타일).
+        (function() {
+            var stop = function(e) { e.preventDefault(); };
+            document.addEventListener('gesturestart', stop, { passive: false });
+            document.addEventListener('gesturechange', stop, { passive: false });
+            document.addEventListener('gestureend', stop, { passive: false });
+            document.addEventListener('touchmove', function(e) {
+                if (e.touches && e.touches.length > 1) e.preventDefault();
+            }, { passive: false });
+        })();
     </script>
     <style>
         :root { --bg: #F4F5F8; --surface: #FFFFFF; --text: #16181D; --text-2: #4B5160; --line: #E6E8EE; --brand: #4F5BD5; --on-brand: #fff;
@@ -21,6 +33,10 @@
         @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --bg: #0F1115; --surface: #1A1D23; --text: #F2F3F5; --text-2: #B6BBC6; --line: #2C303A; --brand: #8F98FF; --on-brand: #0F1115; } }
         :root[data-theme="dark"] { --bg: #0F1115; --surface: #1A1D23; --text: #F2F3F5; --text-2: #B6BBC6; --line: #2C303A; --brand: #8F98FF; --on-brand: #0F1115; }
         html { background: var(--bg); }
+        /* 당겨서 새로고침·화면 끝 바운스 방지, 두 손가락 확대·더블탭 확대 방지 */
+        html, body { overscroll-behavior: none; }
+        html { touch-action: pan-x pan-y; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        a, button, input, select, textarea, label, [onclick] { touch-action: manipulation; }
         body { font-family: var(--font-sans); background-color: var(--bg); color: var(--text); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
         .splash-logo { width: 64px; height: 64px; border-radius: 18px; }
         .splash-wordmark-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
