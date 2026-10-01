@@ -9,7 +9,7 @@
         <!-- SPA 통신 시 확실한 분기를 위한 hidden input -->
         <input type="hidden" name="action" value="create">
         <div class="input-wrapper" style="margin-bottom: 16px;">
-            <input type="text" name="ledger_name" class="input-field" placeholder="가계부 이름 (예: 우리집 가계부)" required>
+            <input type="text" name="ledger_name" maxlength="100" class="input-field" placeholder="가계부 이름 (예: 우리집 가계부)" required>
         </div>
         <button type="submit" class="btn-action" style="width: 100%;">생성하기</button>
     </form>
@@ -29,7 +29,7 @@
 
 {% if error %}
 <script>
-    window.showToast('{{ error }}', 'error');
+    window.showToast({{ error | tojson }}, 'error');
 </script>
 {% endif %}
 

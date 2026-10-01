@@ -11,6 +11,7 @@ from flask import Flask, request, jsonify, render_template
 
 import config
 from models import db, User, Ledger
+from helpers import wants_json
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -19,6 +20,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = config.get_database_uri()
 # 서버리스 함수가 재사용될 때 Neon 쪽에서 이미 끊긴 커넥션을 그대로 쓰다가
 # "SSL connection has been closed unexpectedly" 로 죽는 문제 방지 (사용 전 핑 체크 후 재연결)
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
+# CSV 불러오기 등 업로드 최대 크기 (서버리스 메모리 보호)
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 db.init_app(app)
 
 with app.app_context():
@@ -49,12 +52,20 @@ def inject_user():
     has_ledger = False
     if user_id:
         try:
-            user = User.query.get(user_id)
+            user = db.session.get(User, user_id)
             if user and user.ledger_id:
                 has_ledger = True
-        except:
+        except Exception:
             pass
     return dict(current_user_id=user_id, has_ledger=has_ledger)
+
+
+@app.after_request
+def set_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    return response
 
 
 @app.before_request
@@ -73,7 +84,7 @@ def require_login():
         except Exception:
             pass
 
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+    if wants_json():
         return jsonify({'error': 'Unauthorized'}), 401
 
     og_title = '가계쀼 - 공유 가계부'
@@ -89,9 +100,14 @@ def require_login():
     return render_template('bootstrap.html', og_title=og_title, og_desc=og_desc)
 
 
+@app.errorhandler(413)
+def payload_too_large(e):
+    return jsonify({'success': False, 'error': '파일이 너무 큽니다. (최대 5MB)'}), 413
+
+
 @app.errorhandler(500)
 def internal_server_error(e):
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.headers.get('Accept') == 'application/json':
+    if wants_json():
         return jsonify({'error': '서버 지연이 발생했습니다. 다시 시도해주세요.'}), 500
     return "<h2 style='text-align:center; margin-top:50px;'>서버 접속이 원활하지 않습니다.<br>새로고침을 눌러주세요.</h2>", 500
 

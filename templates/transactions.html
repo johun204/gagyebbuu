@@ -109,7 +109,7 @@
         </div>
 
         <div class="flex-row">
-            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_title_input" name="title" class="input-field" placeholder="제목" required></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_title_input" name="title" maxlength="100" class="input-field" placeholder="제목" required></div>
         </div>
 
         <div class="flex-row">
@@ -129,7 +129,7 @@
         </div>
 
         <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_memo_input" name="memo" class="input-field" placeholder="상세 메모 (선택사항)"></div>
+            <div class="input-wrapper"><input type="text" autocomplete="off" id="edit_memo_input" name="memo" maxlength="255" class="input-field" placeholder="상세 메모 (선택사항)"></div>
         </div>
 
         <div class="flex-row" style="margin-bottom: 8px;">
@@ -165,16 +165,16 @@
         <button type="button" class="chip" onclick="document.getElementById('cat-dialog').close()" style="background:none;">닫기</button>
     </div>
     <div class="flex-row">
-        <div class="input-wrapper"><input type="text" id="new_cat_name" class="input-field" placeholder="새 분류 이름"></div>
+        <div class="input-wrapper"><input type="text" id="new_cat_name" maxlength="50" class="input-field" placeholder="새 분류 이름"></div>
         <button type="button" class="btn-action" onclick="window.addCat()">추가</button>
     </div>
     <div id="cat-list" style="max-height: 300px; overflow-y: auto;"></div>
 </dialog>
 
 <script>
-    window.defaultStart = "{{ default_start }}";
-    window.defaultEnd = "{{ default_end }}";
-    window.currentUserNickname = "{{ current_user.nickname }}";
+    window.defaultStart = {{ default_start | tojson }};
+    window.defaultEnd = {{ default_end | tojson }};
+    window.currentUserNickname = {{ current_user.nickname | tojson }};
 </script>
 
 <script>
@@ -185,15 +185,16 @@
         window.renderTxItem = function(tx) {
             const color = tx.tx_type === '수입' ? 'var(--color-primary)' : 'var(--color-danger)';
             const sign = tx.tx_type === '수입' ? '+' : '-';
-            const memoHtml = tx.memo ? `<div class="tx-memo">${tx.memo}</div>` : '';
+            const esc = window.escapeHtml;
+            const memoHtml = tx.memo ? `<div class="tx-memo">${esc(tx.memo)}</div>` : '';
             const excludeBadge = tx.exclude_analysis ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">분석제외</span>` : '';
             const budgetExcludeBadge = tx.exclude_budget ? `<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">예산제외</span>` : '';
 
             return `
                 <div class="tx-item" style="border-left: 4px solid ${color};">
                     <div style="flex: 1;">
-                        <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px; display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${tx.transactor_color};"></span>${tx.transactor} | 🏷️ ${tx.category}</div>
-                        <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${tx.title}${excludeBadge}${budgetExcludeBadge}</div>${memoHtml}
+                        <div style="font-size: 12px; color: var(--color-secondary); margin-bottom: 4px; display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${window.safeColor(tx.transactor_color)};"></span>${esc(tx.transactor)} | 🏷️ ${esc(tx.category)}</div>
+                        <div style="font-weight: 700; font-size: 16px; word-break: break-all;">${esc(tx.title)}${excludeBadge}${budgetExcludeBadge}</div>${memoHtml}
                     </div>
                     <div style="text-align: right; margin-left: 12px; min-width: 80px;">
                         <div style="font-weight: 700; font-size: 16px; color: ${color};">${sign}${tx.amount.toLocaleString()}원</div>
@@ -354,9 +355,9 @@
                     <div style="padding: 12px 0; border-bottom: 1px solid var(--color-line);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div style="display:flex; align-items:center; gap:8px; flex:1;">
-                                <button type="button" onclick="window.toggleCatColorPicker(${c.id})" title="색상 변경" style="width:18px; height:18px; border-radius:50%; background:${c.color || '#9fa4b0'}; border:none; cursor:pointer; padding:0; flex-shrink:0;"></button>
-                                <input type="text" id="cat-name-${c.id}" value="${c.name}" class="input-field" style="display:none; padding:4px 8px; width:120px;">
-                                <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${c.name}</span>
+                                <button type="button" onclick="window.toggleCatColorPicker(${c.id})" title="색상 변경" style="width:18px; height:18px; border-radius:50%; background:${window.safeColor(c.color)}; border:none; cursor:pointer; padding:0; flex-shrink:0;"></button>
+                                <input type="text" id="cat-name-${c.id}" value="${window.escapeHtml(c.name)}" maxlength="50" class="input-field" style="display:none; padding:4px 8px; width:120px;">
+                                <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${window.escapeHtml(c.name)}</span>
                             </div>
                             <div style="display:flex; gap: 4px; align-items:center;">
                                 <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
@@ -374,7 +375,7 @@
             // 등록·수정 시트의 분류 선택은 팝업 레이어(txsuggest.js)로 대체됨.
             const searchSelect = document.getElementById('search_category_select');
             const svalue = searchSelect ? searchSelect.value : '';
-            const searchHtml = `<option value="">전체 분류</option>` + cats.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+            const searchHtml = `<option value="">전체 분류</option>` + cats.map(c => `<option value="${c.id}">${window.escapeHtml(c.name)}</option>`).join('');
             if(searchSelect) { searchSelect.innerHTML = searchHtml; searchSelect.value = svalue; }
         };
 
@@ -382,7 +383,7 @@
             const n = document.getElementById('new_cat_name'); if (!n || !n.value) return;
             try {
                 const res = await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: n.value})});
-                if (!res.ok) throw new Error();
+                if (!res.ok) { window.showToast(await window.readError(res, '분류 추가에 실패했습니다.'), 'error'); return; }
                 n.value = ''; window.loadCategories();
             } catch(err) { window.showToast('분류 추가에 실패했습니다.', 'error'); }
         };
@@ -391,16 +392,19 @@
             const name = document.getElementById(`cat-name-${id}`).value;
             try {
                 const res = await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
-                if (!res.ok) throw new Error();
+                if (!res.ok) { window.showToast(await window.readError(res, '분류 수정에 실패했습니다.'), 'error'); return; }
                 window.loadCategories();
             } catch(err) { window.showToast('분류 수정에 실패했습니다.', 'error'); }
         };
         window.deleteCat = async function(id) {
-            if (!confirm('삭제하시겠습니까?')) return;
+            if (!confirm('분류를 삭제하시겠습니까?\n이 분류로 기록된 내역은 삭제되지 않고 \'미분류\'로 옮겨집니다.')) return;
             try {
                 const res = await fetch(`/api/category/${id}/delete`, { method: 'POST' });
-                if (!res.ok) throw new Error();
+                if (!res.ok) { window.showToast(await window.readError(res, '분류 삭제에 실패했습니다.'), 'error'); return; }
+                const d = await res.json().catch(() => ({}));
+                if (d.moved) window.showToast(`내역 ${d.moved}건을 '미분류'로 옮겼어요.`, 'success');
                 window.loadCategories();
+                window.loadMoreResults(true);
             } catch(err) { window.showToast('분류 삭제에 실패했습니다.', 'error'); }
         };
         window.moveCat = async function(id, dir) {
@@ -457,7 +461,7 @@
 
             window.setEditTxType(tx.tx_type);
             document.getElementById('edit_amount_input').value = tx.amount.toLocaleString();
-            window.syncTransactorGroup(document.getElementById('edit-transactor-group'), tx.transactor);
+            window.syncTransactorGroup(document.getElementById('edit-transactor-group'), tx.transactor_value || tx.transactor);
             document.getElementById('edit_title_input').value = tx.title;
             if (window.txTxSuggest) window.txTxSuggest.setCategoryId(tx.category_id);
             document.getElementById('edit_date_input').value = tx.date;
@@ -496,7 +500,7 @@
                     }
                     window.loadMoreResults(true);
                 } else {
-                    window.showToast(isAdd ? '등록에 실패했습니다. 다시 시도해주세요.' : '수정에 실패했습니다. 다시 시도해주세요.', 'error');
+                    window.showToast(await window.readError(res, isAdd ? '등록에 실패했습니다. 다시 시도해주세요.' : '수정에 실패했습니다. 다시 시도해주세요.'), 'error');
                 }
             } catch(err) {
                 window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');

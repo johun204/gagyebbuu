@@ -13,7 +13,7 @@
     <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3>
     <form action="/update_nickname" method="POST" onsubmit="return confirm('닉네임을 변경하시겠습니까?');">
         <div class="flex-row" style="margin-bottom: 8px;">
-            <div class="input-wrapper"><input type="text" name="nickname" class="input-field" value="{{ current_user.nickname }}" required></div>
+            <div class="input-wrapper"><input type="text" name="nickname" maxlength="50" class="input-field" value="{{ current_user.nickname }}" required></div>
             <button type="submit" class="btn-action">변경</button>
         </div>
         <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-secondary); cursor: pointer; padding-left: 4px;">
@@ -52,7 +52,7 @@
 <div class="card">
     <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 이름 변경</h3>
     <form action="/update_ledger_name" method="POST" class="flex-row" onsubmit="return confirm('가계부 이름을 변경하시겠습니까?');">
-        <div class="input-wrapper"><input type="text" name="name" class="input-field" value="{{ ledger.name }}" required></div>
+        <div class="input-wrapper"><input type="text" name="name" maxlength="100" class="input-field" value="{{ ledger.name }}" required></div>
         <button type="submit" class="btn-action">변경</button>
     </form>
 </div>
@@ -79,6 +79,10 @@
                     <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
                     <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
                 </div>
+
+                <form action="/regenerate_invite" method="POST" style="margin-top: 16px;" onsubmit="return confirm('초대 링크를 새로 만들까요?\n이전에 공유한 링크와 코드는 더 이상 사용할 수 없게 됩니다.');">
+                    <button type="submit" class="chip" style="width: 100%; padding: 10px; color: var(--color-secondary); background: var(--color-line);">초대 링크 새로 만들기</button>
+                </form>
             </div>
         </div>
     </div>
@@ -93,7 +97,7 @@
 
     <form action="/import" method="POST" enctype="multipart/form-data" onsubmit="if(!confirm('CSV 데이터를 불러오시겠습니까?')) { event.preventDefault(); return false; }">
         <input type="file" name="csv_file" accept=".csv" class="input-field" style="margin-bottom: 12px;" required>
-        <p style="font-size: 12px; color: var(--color-danger); margin-bottom: 12px;">주의: 기존 데이터와 중복될 수 있으므로 빈 가계부에서 사용하는 것을 권장합니다.</p>
+        <p style="font-size: 12px; color: var(--color-secondary); margin-bottom: 12px;">이미 있는 내역과 날짜·시간·제목·금액·거래자가 모두 같은 줄은 중복으로 보고 건너뜁니다.</p>
         <button type="submit" class="btn-action" style="width: 100%;">CSV 불러오기</button>
     </form>
 </div>
@@ -112,6 +116,30 @@
 <script>
     window.__myColor = {{ (current_user.color or '') | tojson }};
     window.__togetherColor = {{ (ledger.together_color or '') | tojson }};
+    {
+        // 처리 결과 안내 (서버가 ?msg=... 로 돌려보낸 경우). 새로고침 시 다시 뜨지 않도록 주소를 정리한다.
+        const MESSAGES = {
+            nickname_empty: ['닉네임을 입력해주세요.', 'error'],
+            nickname_taken: ["'함께' 또는 다른 참여자와 같은 닉네임은 사용할 수 없어요.", 'error'],
+            invite_regenerated: ['초대 링크를 새로 만들었어요. 이전 링크는 더 이상 사용할 수 없어요.', 'success'],
+            import_nofile: ['불러올 CSV 파일을 선택해주세요.', 'error'],
+            import_encoding: ['CSV 파일을 읽을 수 없어요. UTF-8 형식으로 저장된 파일인지 확인해주세요.', 'error'],
+            import_failed: ['CSV를 불러오는 중 오류가 발생해 아무것도 반영하지 않았어요.', 'error'],
+        };
+        const msg = {{ msg | tojson }};
+        if (msg === 'imported') {
+            let text = `내역 {{ imported or 0 }}건을 불러왔어요.`;
+            {% if skipped_dup %}text += ` (중복 {{ skipped_dup }}건 건너뜀)`;{% endif %}
+            {% if skipped_bad %}text += ` (형식 오류 {{ skipped_bad }}건 건너뜀)`;{% endif %}
+            window.showToast(text, 'success');
+        } else if (MESSAGES[msg]) {
+            window.showToast(MESSAGES[msg][0], MESSAGES[msg][1]);
+        }
+        if (msg) {
+            window.history.replaceState(window.history.state, '', '/mypage');
+            localStorage.setItem('gb_last_page', '/mypage');
+        }
+    }
 </script>
 <script>
     {

@@ -63,7 +63,7 @@
                     for(let payer in data.payer_expense) {
                         if (max_total > 0) {
                             let pct = (data.payer_expense[payer] / max_total) * 100;
-                            budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${data.payer_color_map[payer]};"></div>`;
+                            budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
                         }
                     }
                     budgetHtml += `</div>`;
@@ -76,7 +76,7 @@
                     `;
                     for(let payer in data.payer_expense) {
                         let pct = (data.payer_expense[payer] / data.budget_expense) * 100;
-                        budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${data.payer_color_map[payer]};"></div>`;
+                        budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
                     }
                     budgetHtml += `</div>`;
                 }
@@ -93,7 +93,7 @@
                     for(let payer in b.payers) {
                         if (b.spent > 0) {
                             let pct = (b.payers[payer] / (b.budget > 0 ? max_val : b.spent)) * 100;
-                            barsHtml += `<div style="height: 100%; width: ${pct}%; background: ${data.payer_color_map[payer]};"></div>`;
+                            barsHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
                         }
                     }
 
@@ -101,7 +101,7 @@
                     let itemHtml = `
                         <div style="margin-bottom: 8px;">
                             <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
-                                <span>${b.name}</span>
+                                <span>${window.escapeHtml(b.name)}</span>
                                 <span style="${colorStyle}">${valStr}</span>
                             </div>
                             <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
@@ -139,8 +139,8 @@
                     payers.forEach(payer => {
                         budgetHtml += `
                         <div style="display: flex; align-items: center; gap: 6px;">
-                            <div style="width: 12px; height: 12px; border-radius: 3px; background: ${data.payer_color_map[payer]};"></div>
-                            <span style="font-size: 12px; color: var(--color-foreground); font-weight: 600;">${payer}</span>
+                            <div style="width: 12px; height: 12px; border-radius: 3px; background: ${window.safeColor(data.payer_color_map[payer])};"></div>
+                            <span style="font-size: 12px; color: var(--color-foreground); font-weight: 600;">${window.escapeHtml(payer)}</span>
                         </div>`;
                     });
                     budgetHtml += `</div>`;
