@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, url_for, jsonify, Respons
 from sqlalchemy import or_
 
 from models import db, Category, Transaction
-from helpers import (spa_redirect, COLOR_PALETTE, pick_random_color, require_ledger, json_error, clean_text,
+from helpers import (spa_redirect, COLOR_PALETTE, norm_color, pick_random_color, require_ledger, json_error, clean_text,
                      parse_amount, parse_int, parse_datetime, resolve_transactor, get_or_create_uncategorized,
                      TX_TYPES, TOGETHER, UNCATEGORIZED, MAX_NICKNAME_LEN, MAX_LEDGER_NAME_LEN,
                      MAX_CATEGORY_NAME_LEN, MAX_TITLE_LEN, MAX_MEMO_LEN)
@@ -103,7 +103,7 @@ def set_budget():
                 cat.budget = parse_amount(val) or 0
 
     db.session.commit()
-    return spa_redirect(url_for('settings.settings'))
+    return spa_redirect(url_for('settings.settings', saved='budget'))
 
 
 def _category_name_error(ledger_id, name, exclude_id=None):
@@ -123,7 +123,7 @@ def _category_name_error(ledger_id, name, exclude_id=None):
 @require_ledger
 def api_get_categories():
     cats = Category.query.filter_by(ledger_id=g.ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
-    return jsonify([{'id': c.id, 'name': c.name, 'is_default': c.is_default, 'color': c.color} for c in cats])
+    return jsonify([{'id': c.id, 'name': c.name, 'is_default': c.is_default, 'color': norm_color(c.color)} for c in cats])
 
 
 @settings_bp.route('/api/category/add', methods=['POST'])
@@ -331,8 +331,8 @@ def import_csv():
                     cat.budget = parse_amount(row[3]) or 0
                     cat.sort_order = parse_int(row[4]) or 0
                     # color는 이후에 추가된 컬럼이라 예전 백업 파일엔 없을 수 있다 (그때는 새 분류에만 랜덤 배정)
-                    if len(row) >= 6 and row[5] in COLOR_PALETTE:
-                        cat.color = row[5]
+                    if len(row) >= 6 and norm_color(row[5], None):
+                        cat.color = norm_color(row[5])
                     elif is_new:
                         existing_colors = [c.color for c in Category.query.filter_by(ledger_id=ledger.id).all() if c.color]
                         cat.color = pick_random_color(existing_colors)

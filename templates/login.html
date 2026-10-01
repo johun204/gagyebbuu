@@ -1,17 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card" style="max-width: 400px; margin: 60px auto; text-align: center; padding: 40px 24px;">
-    <div style="font-size: 48px; margin-bottom: 16px;">👫</div>
-    <h1 style="font-size: 32px; font-weight: 800; color: var(--color-primary); margin-bottom: 8px;">가계쀼</h1>
-    <p style="font-size: 14px; color: var(--color-action); font-weight: 700; margin-bottom: 16px;">공유 가계부</p>
-    <p style="font-size: 15px; color: var(--color-secondary); margin-bottom: 40px; line-height: 1.5; word-break: keep-all;">
-        부부가 함께 쓰는 귀여운 가계부,<br>수입과 지출을 쉽고 투명하게 관리해보세요.
-    </p>
-    
-    <div style="border-top: 1px solid var(--color-line); margin-bottom: 24px;"></div>
-    
-    <h2 style="font-size: 14px; font-weight: 600; color: var(--color-muted); margin-bottom: 16px;">로그인하여 시작하기</h2>
-    <a href="https://kauth.kakao.com/oauth/authorize?client_id={{ client_id }}&redirect_uri={{ redirect_uri }}&response_type=code&state={{ state }}" class="btn-action no-spa" style="width: 100%; background-color: #fee500; color: #111111;">
+<style>
+    body { padding-bottom: 24px; }
+    .login-wrap { min-height: calc(100vh - 60px); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 24px 8px; }
+    .login-wrap img { width: 96px; height: 96px; border-radius: 26px; box-shadow: 0 12px 30px color-mix(in srgb, var(--brand) 35%, transparent); margin-bottom: 22px; }
+    .login-wrap h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+    .login-wrap .tagline { font-size: 16px; color: var(--text-2); margin: 8px 0 28px; line-height: 1.55; word-break: keep-all; }
+    .features { text-align: left; background: var(--surface); border-radius: var(--r-lg); padding: 6px 18px; width: 100%; max-width: 360px; margin-bottom: 28px; box-shadow: var(--shadow); }
+    .features div { display: flex; gap: 10px; align-items: center; padding: 11px 0; font-size: 14.5px; }
+    .features div + div { border-top: 1px solid var(--line); }
+    .features b { color: var(--brand); width: 20px; text-align: center; }
+    .kakao-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; max-width: 360px; background: #FEE500; color: #191919; border-radius: var(--r-md); padding: 15px; font-size: 16px; font-weight: 700; text-decoration: none; }
+</style>
+<div class="login-wrap">
+    <img src="/static/icon-192.png" alt="">
+    <h1>가계쀼</h1>
+    <p class="tagline">둘이 함께 쓰는 가계부,<br>누가 어디에 얼마 썼는지 한눈에.</p>
+    <div class="features">
+        <div><b>1</b>지출·수입을 둘이 같이 기록하고 바로 확인</div>
+        <div><b>2</b>예산 대비 남은 돈과 하루 권장 지출 안내</div>
+        <div><b>3</b>카테고리·요일·장소별 소비 분석</div>
+    </div>
+    <a href="https://kauth.kakao.com/oauth/authorize?client_id={{ client_id }}&redirect_uri={{ redirect_uri }}&response_type=code&state={{ state }}" class="kakao-btn no-spa">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#191919" d="M12 3C6.5 3 2 6.6 2 11c0 2.8 1.9 5.3 4.7 6.7l-1 3.6c-.1.3.3.6.6.4l4.2-2.8c.5.1 1 .1 1.5.1 5.5 0 10-3.6 10-8S17.5 3 12 3z"/></svg>
         카카오로 시작하기
     </a>
 </div>

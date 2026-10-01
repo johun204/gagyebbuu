@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% from '_icons.html' import icon %}
+{% block content %}
+<style>
+    .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+    .tile { background: var(--surface); border-radius: var(--r-md); padding: 14px; box-shadow: var(--shadow); min-width: 0; }
+    .tile .k { font-size: 12.5px; color: var(--text-3); font-weight: 600; }
+    .tile .v { font-size: 16px; font-weight: 800; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tile .s { font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
+    .toggle-table { font-size: 12.5px; color: var(--text-3); background: none; border: none; cursor: pointer; text-decoration: underline; }
+    .cat-row .bar { height: 6px; background: var(--track); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+    .cat-row .bar span { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+    .change { font-size: 12px; font-weight: 600; }
+    .change.up { color: var(--critical); } .change.down { color: var(--good); }
+    .rank { width: 22px; font-weight: 800; color: var(--text-3); font-size: 14px; text-align: center; flex-shrink: 0; }
+    #an-body { transition: opacity .2s; }
+</style>
+
+<div class="appbar">
+    <h1>분석</h1>
+    <div class="month-nav">
+        <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.anShift(-1)" aria-label="이전 달">{{ icon('chevron-left', 20) }}</button>
+        <button type="button" class="label" id="an-month-label" style="font-size:16px;" onclick="window.openMonthPicker(window.anY, window.anM)">{{ t_year }}년 {{ t_month }}월</button>
+        <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.anShift(1)" aria-label="다음 달">{{ icon('chevron-right', 20) }}</button>
+    </div>
+    <a href="/settings" class="icon-btn" aria-label="설정">{{ icon('settings', 24) }}</a>
+</div>
+
+<div id="an-body"></div>
+
+<script>
+    window.anInitial = {{ initial_data | tojson }};
+    window.anY = {{ t_year }};
+    window.anM = {{ t_month }};
+</script>
+<script>
+{
+    const esc = window.escapeHtml, won = window.won;
+    const cache = {};
+    const key = (y, m) => `${y}-${m}`;
+    cache[key(window.anY, window.anM)] = window.anInitial;
+
+    const chevron = window.ICONS['chevron-right'];
+    const changeHtml = c => (c.change_pct !== null && c.change_pct !== 0)
+        ? `<span class="change ${c.change_pct > 0 ? 'up' : 'down'}">${c.change_pct > 0 ? '▲' : '▼'}${Math.abs(c.change_pct)}%</span>`
+        : (c.prev_amount === 0 ? '<span class="change muted">새로 생김</span>' : '');
+
+    function tiles(d) {
+        const rate = d.savings_rate;
+        return `<div class="tiles">
+            <div class="tile"><div class="k">수입</div><div class="v income-text">${window.wonShort(d.income)}원</div><div class="s">${won(d.income)}</div></div>
+            <div class="tile"><div class="k">지출</div><div class="v">${window.wonShort(d.expense)}원</div><div class="s">${won(d.expense)}</div></div>
+            <div class="tile"><div class="k">저축률</div><div class="v" style="color:${rate === null ? 'var(--text-3)' : rate >= 0 ? 'var(--good)' : 'var(--critical)'}">${rate === null ? '-' : rate + '%'}</div><div class="s">수입 대비 남은 돈</div></div>
+        </div>`;
+    }
+
+    function trendCard(d) {
+        const cur = d.trend[d.trend.length - 1];
+        let note = '';
+        if (d.trend_avg > 0) {
+            const diff = cur.expense - d.trend_avg;
+            note = `최근 ${d.trend.length - 1}개월 평균 <b>${won(d.trend_avg)}</b> 대비 ${diff >= 0 ? `<b class="expense-text">${won(diff)} 많아요</b>` : `<b class="income-text">${won(-diff)} 적어요</b>`}${d.is_current ? ' (이번 달은 진행 중)' : ''}`;
+        }
+        return `<div class="card">
+            <div class="section-head"><h2>월별 지출 추이</h2><button type="button" class="toggle-table" onclick="document.getElementById('trend-table').hidden = !document.getElementById('trend-table').hidden">표로 보기</button></div>
+            ${note ? `<p class="caption" style="margin:-6px 0 10px;">${note}</p>` : ''}
+            <div class="chart-box" style="height: 200px;"><canvas id="trend-chart" role="img" aria-label="최근 ${d.trend.length}개월 지출 막대 그래프"></canvas></div>
+            <div class="legend"><span><i style="background:var(--brand)"></i>${d.month}월</span><span><i style="background:var(--surface-3)"></i>이전 달</span>${d.trend_avg ? '<span><i class="line" style="background:var(--text-3)"></i>최근 평균</span>' : ''}</div>
+            <table class="data" id="trend-table" hidden><thead><tr><th>월</th><th>수입</th><th>지출</th><th>수입−지출</th></tr></thead><tbody>
+                ${d.trend.map(t => `<tr><td>${t.year}.${t.month}</td><td>${won(t.income)}</td><td>${won(t.expense)}</td><td>${won(t.income - t.expense)}</td></tr>`).join('')}</tbody></table>
+        </div>`;
+    }
+
+    function categoryCard(d) {
+        if (!d.categories.length) return '';
+        const max = Math.max(...d.categories.map(c => c.amount));
+        // 구성비 막대: 상위 5개 + 기타 (색이 너무 많아지지 않도록)
+        const top = d.categories.slice(0, 5);
+        const rest = d.categories.slice(5).reduce((s, c) => s + c.amount, 0);
+        const segs = top.map(c => ({name: c.name, amount: c.amount, color: window.safeColor(c.color)}));
+        if (rest > 0) segs.push({name: '기타', amount: rest, color: 'var(--text-3)'});
+        return `<div class="card">
+            <div class="section-head"><h2>카테고리별 지출</h2><span class="caption">${esc(d.compare_label)} 대비</span></div>
+            <div class="stack" role="img" aria-label="카테고리 구성비: ${segs.map(s => `${esc(s.name)} ${Math.round(s.amount / d.category_total * 100)}%`).join(', ')}">
+                ${segs.map(s => `<span style="width:${s.amount / d.category_total * 100}%;background:${s.color}"></span>`).join('')}</div>
+            <div class="list" style="margin-top:6px;">${d.categories.map(c => `
+                <a class="list-row cat-row" href="/transactions?category_id=${c.id}&year=${d.year}&month=${d.month}&tx_type=지출">
+                    <span class="dot" style="background:${window.safeColor(c.color)}"></span>
+                    <div class="grow">
+                        <div style="display:flex;justify-content:space-between;gap:8px;"><span class="title">${esc(c.name)}</span><b class="num">${won(c.amount)}</b></div>
+                        <div class="meta"><span>${c.share}%</span>${changeHtml(c) ? '·' + changeHtml(c) : ''}${c.prev_amount ? `<span>· 지난달 ${won(c.prev_amount)}</span>` : ''}</div>
+                        <div class="bar"><span style="width:${max ? c.amount / max * 100 : 0}%"></span></div>
+                    </div>${chevron}
+                </a>`).join('')}</div>
+        </div>`;
+    }
+
+    function weekdayCard(d) {
+        if (!d.weekdays.some(w => w.total > 0)) return '';
+        const top = d.weekdays.reduce((a, b) => b.average > a.average ? b : a);
+        return `<div class="card">
+            <div class="section-head"><h2>요일별 하루 평균 지출</h2></div>
+            <p class="caption" style="margin:-6px 0 10px;"><b style="color:var(--text)">${top.label}요일</b>에 가장 많이 써요 · 평균 ${won(top.average)}</p>
+            <div class="chart-box" style="height: 170px;"><canvas id="weekday-chart" role="img" aria-label="요일별 하루 평균 지출: ${d.weekdays.map(w => `${w.label} ${won(w.average)}`).join(', ')}"></canvas></div>
+        </div>`;
+    }
+
+    function peopleCard(d) {
+        if (!d.people.length) return '';
+        return `<div class="card">
+            <div class="section-head"><h2>사람별 지출</h2></div>
+            <div class="list">${d.people.map(p => `
+                <div class="list-row" style="align-items:flex-start;cursor:default;">
+                    <span class="dot" style="background:${window.safeColor(p.color)};margin-top:6px;"></span>
+                    <div class="grow">
+                        <div style="display:flex;justify-content:space-between;gap:8px;"><span class="title">${esc(p.name)}</span><b class="num">${won(p.amount)} <span class="muted" style="font-weight:600">${p.share}%</span></b></div>
+                        <div class="chips" style="margin-top:6px;">${p.top_categories.map(tc => `<span class="chip" style="cursor:default;padding:5px 9px;">${esc(tc.name)} ${window.wonShort(tc.amount)}</span>`).join('')}</div>
+                    </div>
+                </div>`).join('')}</div>
+        </div>`;
+    }
+
+    function placesCard(d) {
+        if (!d.places.length) return '';
+        return `<div class="card">
+            <div class="section-head"><h2>자주 쓴 곳</h2><span class="caption">횟수 순</span></div>
+            <div class="list">${d.places.map((p, i) => `
+                <a class="list-row" href="/transactions?keyword=${encodeURIComponent(p.title)}&year=${d.year}&month=${d.month}">
+                    <span class="rank">${i + 1}</span>
+                    <div class="grow"><div class="title">${esc(p.title)}</div><div class="meta">${p.count}회 · 1회 평균 ${won(p.amount / p.count)}</div></div>
+                    <b class="num">${won(p.amount)}</b>
+                </a>`).join('')}</div>
+        </div>`;
+    }
+
+    function bigCard(d) {
+        if (!d.top_expenses.length) return '';
+        return `<div class="card">
+            <div class="section-head"><h2>큰 지출 TOP ${d.top_expenses.length}</h2></div>
+            <div class="list">${d.top_expenses.map((t, i) => `
+                <button type="button" class="list-row" onclick="window.anEdit(${t.id})">
+                    <span class="rank">${i + 1}</span>
+                    <div class="grow"><div class="title">${esc(t.title || t.category)}</div>
+                        <div class="meta">${esc(t.category)} · ${esc(t.transactor)} · ${t.date.slice(5).replace('-', '.')}</div></div>
+                    <b class="num">${won(t.amount)}</b>
+                </button>`).join('')}</div>
+        </div>`;
+    }
+
+    function drawTrend(d) {
+        const el = document.getElementById('trend-chart');
+        if (!el || !window.Chart) return;
+        const brand = window.cssVar('--brand'), gray = window.cssVar('--surface-3'), ink = window.cssVar('--text-3');
+        const n = d.trend.length;
+        window.appCharts.trend = new Chart(el, {
+            type: 'bar',
+            data: {
+                labels: d.trend.map(t => t.label),
+                datasets: [
+                    { label: '지출', data: d.trend.map(t => t.expense), backgroundColor: d.trend.map((_, i) => i === n - 1 ? brand : gray),
+                      borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom', maxBarThickness: 24, order: 2 },
+                    ...(d.trend_avg ? [{ type: 'line', label: '평균', data: d.trend.map(() => d.trend_avg), borderColor: ink, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, order: 1 }] : []),
+                ],
+            },
+            options: {
+                maintainAspectRatio: false,
+                scales: {
+                    x: { grid: { display: false }, border: { color: window.cssVar('--line-strong') } },
+                    y: { beginAtZero: true, grid: { color: window.cssVar('--line') }, border: { display: false }, ticks: { maxTicksLimit: 4, callback: v => window.wonShort(v) } },
+                },
+                plugins: { tooltip: { callbacks: { label: it => ` ${it.dataset.label} ${won(it.raw)}` } } },
+            },
+            plugins: [{ id: 'capLabel', afterDatasetsDraw(chart) {
+                // 이번 달 막대 위에만 값 표시 (나머지는 툴팁/표로)
+                const meta = chart.getDatasetMeta(0), bar = meta.data[n - 1];
+                if (!bar) return;
+                const ctx = chart.ctx; ctx.save();
+                ctx.font = `700 12px ${Chart.defaults.font.family}`; ctx.fillStyle = window.cssVar('--text'); ctx.textAlign = 'center';
+                ctx.fillText(window.wonShort(d.trend[n - 1].expense), bar.x, bar.y - 6); ctx.restore();
+            } }],
+        });
+    }
+
+    function drawWeekday(d) {
+        const el = document.getElementById('weekday-chart');
+        if (!el || !window.Chart) return;
+        const brand = window.cssVar('--brand'), gray = window.cssVar('--surface-3');
+        const maxAvg = Math.max(...d.weekdays.map(w => w.average));
+        window.appCharts.weekday = new Chart(el, {
+            type: 'bar',
+            data: { labels: d.weekdays.map(w => w.label), datasets: [{ label: '하루 평균', data: d.weekdays.map(w => w.average),
+                backgroundColor: d.weekdays.map(w => w.average === maxAvg ? brand : gray), borderRadius: { topLeft: 4, topRight: 4 }, borderSkipped: 'bottom', maxBarThickness: 24 }] },
+            options: {
+                maintainAspectRatio: false,
+                scales: {
+                    x: { grid: { display: false }, border: { color: window.cssVar('--line-strong') } },
+                    y: { beginAtZero: true, grid: { color: window.cssVar('--line') }, border: { display: false }, ticks: { maxTicksLimit: 3, callback: v => window.wonShort(v) } },
+                },
+                plugins: { tooltip: { callbacks: { label: it => { const w = d.weekdays[it.dataIndex]; return ` 하루 평균 ${won(w.average)} (${w.days}일, 합계 ${won(w.total)})`; } } } },
+            },
+        });
+    }
+
+    function render(d) {
+        window.anData = d;
+        window.applyChartTheme();
+        Object.values(window.appCharts || {}).forEach(c => c && c.destroy());
+        window.appCharts = {};
+        const body = document.getElementById('an-body');
+        body.innerHTML = tiles(d) + trendCard(d) + (d.has_data
+            ? categoryCard(d) + weekdayCard(d) + peopleCard(d) + placesCard(d) + bigCard(d)
+            : `<div class="card"><div class="empty"><p style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">${d.month}월에 기록된 내역이 없어요</p><p>내역이 쌓이면 카테고리·요일·장소별 분석을 보여드려요.</p></div></div>`);
+        drawTrend(d);
+        drawWeekday(d);
+    }
+
+    async function load(y, m, opts) {
+        opts = opts || {};
+        window.anY = y; window.anM = m;
+        document.getElementById('an-month-label').textContent = `${y}년 ${m}월`;
+        window.setStoredMonth(y, m);
+        window.history.replaceState(window.history.state, '', `/analysis?year=${y}&month=${m}`);
+        localStorage.setItem('gb_last_page', `/analysis?year=${y}&month=${m}`);
+        if (!opts.fresh && cache[key(y, m)]) { render(cache[key(y, m)]); return; }
+        const body = document.getElementById('an-body');
+        body.classList.add('is-refreshing');
+        try {
+            const res = await fetch(`/api/analysis_data?year=${y}&month=${m}`);
+            if (!res.ok) throw new Error();
+            const d = await res.json();
+            cache[key(y, m)] = d;
+            if (window.anY === y && window.anM === m) render(d);
+        } catch (e) {
+            window.showToast('데이터를 불러오지 못했어요.', 'error');
+        } finally { body.classList.remove('is-refreshing'); }
+    }
+
+    window.anShift = function(dir) {
+        const t = dir > 0 ? window.getNextMonth(window.anY, window.anM) : window.getPrevMonth(window.anY, window.anM);
+        load(t.y, t.m);
+    };
+    window.onMonthJump = (y, m) => load(y, m);
+    window.onTxChanged = () => { Object.keys(cache).forEach(k => delete cache[k]); load(window.anY, window.anM, {fresh: true}); };
+    window.anEdit = function(id) {
+        const t = (window.anData.top_expenses || []).find(x => x.id === id);
+        if (t) window.openTxSheet({tx: t});
+    };
+
+    render(window.anInitial);
+}
+</script>
+{% endblock %}

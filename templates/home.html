@@ -1,371 +1,274 @@
 {% extends "base.html" %}
+{% from '_icons.html' import icon %}
 {% block content %}
 <style>
-    #home-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
-    #home-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
-    .home-slide { width: 33.333%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
+    .hero-label { font-size: 14px; color: var(--text-2); font-weight: 600; }
+    .hero-value { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; margin: 2px 0 8px; line-height: 1.2; }
+    .delta { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 600; padding: 4px 9px; border-radius: 999px; }
+    .delta.up { background: var(--critical-soft); color: var(--critical); }
+    .delta.down { background: var(--good-soft); color: var(--good); }
+    .delta.flat { background: var(--surface-2); color: var(--text-2); }
+    .kpis { display: flex; gap: 8px; margin-top: 16px; }
+    .kpi { flex: 1; min-width: 0; background: var(--surface-2); border-radius: var(--r-md); padding: 12px 14px; }
+    .kpi .k { font-size: 12.5px; color: var(--text-3); font-weight: 600; }
+    .kpi .v { font-size: 17px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .budget-box { margin-top: 18px; }
+    .budget-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 13.5px; }
+    .budget-hint { margin-top: 10px; font-size: 13.5px; color: var(--text-2); display: flex; gap: 6px; align-items: flex-start; }
+    .budget-hint .icon { color: var(--brand); margin-top: 1px; }
+    .budget-hint.over .icon { color: var(--critical); }
+    .cat-row .bar { height: 6px; background: var(--track); border-radius: 999px; margin-top: 6px; overflow: hidden; }
+    .cat-row .bar span { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+    .change { font-size: 12px; font-weight: 600; }
+    .change.up { color: var(--critical); } .change.down { color: var(--good); }
+    .person-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; font-size: 14px; }
+    .person-row .name { flex: 1; font-weight: 600; }
+    #home-body { transition: opacity .2s; }
 </style>
 
-<div style="text-align: center; font-size: 12px; font-weight: 700; color: var(--color-muted); margin-bottom: 4px;">{{ ledger.name }}</div>
-<div class="month-selector">
-    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(-1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a>
-    <!-- 월 선택 다이얼로그 연동 -->
-    <h3 id="home-month-header" onclick="window.openMonthPicker(window.currentHomeY || {{ t_year }}, window.currentHomeM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월</h3>
-    <a href="javascript:void(0)" onclick="window.shiftHomeMonth(1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></a>
-</div>
-
-<div id="home-slider-wrapper">
-    <div id="home-slider">
-        <div id="slide-home-prev" class="home-slide"></div>
-        <div id="slide-home-curr" class="home-slide"></div>
-        <div id="slide-home-next" class="home-slide"></div>
+<div class="appbar">
+    <div style="flex: 1; min-width: 0;">
+        <div class="eyebrow" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ ledger.name }}</div>
+        <div class="month-nav">
+            <button type="button" class="icon-btn" style="width:32px;height:32px;margin-left:-8px;" onclick="window.homeShift(-1)" aria-label="이전 달">{{ icon('chevron-left', 20) }}</button>
+            <button type="button" class="label" id="home-month-label" onclick="window.openMonthPicker(window.homeY, window.homeM)">{{ t_year }}년 {{ t_month }}월</button>
+            <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.homeShift(1)" aria-label="다음 달">{{ icon('chevron-right', 20) }}</button>
+        </div>
     </div>
+    <a href="/settings" class="icon-btn" aria-label="설정">{{ icon('settings', 24) }}</a>
 </div>
 
+<div id="home-body"></div>
+
 <script>
-    window.initialHomeData = {{ initial_data | tojson | safe }};
-    window.currentHomeY = {{ t_year }};
-    window.currentHomeM = {{ t_month }};
+    window.homeInitial = {{ initial_data | tojson }};
+    window.homeY = {{ t_year }};
+    window.homeM = {{ t_month }};
 </script>
-
 <script>
-    {
-        window.allHomeData = {};
+{
+    const esc = window.escapeHtml, won = window.won;
+    const cache = {};
+    const key = (y, m) => `${y}-${m}`;
+    cache[key(window.homeY, window.homeM)] = window.homeInitial;
 
-        window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
-        window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
+    function hexToRgba(hex, a) {
+        const h = hex.replace('#', '');
+        const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16);
+        return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+    }
 
-        window.fetchHomeData = async function(y, m) {
-            let key = `${y}-${m}`;
-            if (window.allHomeData[key]) return window.allHomeData[key];
-            let res = await fetch(`/api/home_data?year=${y}&month=${m}`);
-            let data = await res.json();
-            window.allHomeData[key] = data;
-            return data;
-        };
+    function deltaChip(d) {
+        if (d.expense_change_pct === null || d.prev_expense_same === 0) return `<span class="delta flat">${esc(d.compare_label)} 기록 없음</span>`;
+        const diff = d.expense - d.prev_expense_same;
+        if (diff === 0) return `<span class="delta flat">${esc(d.compare_label)}과 같아요</span>`;
+        const up = diff > 0;
+        return `<span class="delta ${up ? 'up' : 'down'}">${esc(d.compare_label)}보다 ${won(Math.abs(diff))} ${up ? '더 썼어요 ▲' : '덜 썼어요 ▼'}</span>`;
+    }
 
-        window.renderHomeSlide = function(data) {
-            let uid = `${data.year}_${data.month}`;
-            
-            let budgetHtml = '';
-            if(data.ledger_budget > 0 || data.budget_expense > 0 || data.budget_status.length > 0) {
-                budgetHtml += `<div style="padding-top: 16px; border-top: 1px solid var(--color-line);">`;
+    function budgetBlock(d) {
+        const b = d.budget;
+        if (!b) {
+            return `<a href="/settings#budget" class="budget-hint" style="text-decoration:none;margin-top:16px;">${window.ICONS.info}<span>월 예산을 정하면 남은 금액과 <b>하루에 쓸 수 있는 금액</b>을 알려드려요. <u>예산 설정</u></span></a>`;
+        }
+        const pct = Math.min(b.used_pct, 100);
+        const over = b.spent > b.budget;
+        const ahead = b.pace_pct !== null && b.used_pct > b.pace_pct + 5;
+        const color = over ? 'var(--critical)' : ahead ? 'var(--warning)' : 'var(--brand)';
+        const marker = b.pace_pct !== null ? `<div class="marker" style="left:calc(${b.pace_pct}% - 1px)" title="오늘까지 권장 사용률 ${b.pace_pct}%"></div>` : '';
+        let hint = '';
+        if (over) hint = `${window.ICONS.alert}<span>예산을 <b>${won(b.spent - b.budget)}</b> 넘었어요.</span>`;
+        else if (b.per_day !== null) hint = `${window.ICONS.info}<span>남은 <b>${b.days_left}일</b> 동안 하루 <b>${won(b.per_day)}</b>씩 쓸 수 있어요.</span>`;
+        else hint = `${window.ICONS.check}<span>예산 안에서 <b>${won(b.remaining)}</b> 남기고 마무리했어요.</span>`;
+        return `
+        <div class="budget-box">
+            <div class="budget-top"><span><b style="font-size:16px;color:${over ? 'var(--critical)' : 'var(--text)'}">${b.used_pct}%</b> <span class="sub">사용</span></span>
+                <span class="sub">${over ? '' : '남은 예산 '}<b style="color:${over ? 'var(--critical)' : 'var(--text)'}">${won(Math.abs(b.remaining))}</b>${over ? ' 초과' : ''}</span></div>
+            <div class="meter" role="img" aria-label="예산 사용률 ${b.used_pct}%${b.pace_pct !== null ? ', 오늘까지 권장 ' + b.pace_pct + '%' : ''}"><div class="fill" style="width:${pct}%;background:${color}"></div>${marker}</div>
+            <div class="caption" style="margin-top:6px;">한 달 예산 ${won(b.budget)}${b.pace_pct !== null ? ` · 세로선은 오늘까지 쓰면 딱 맞는 지점(${b.pace_pct}%)` : ''}</div>
+            <div class="budget-hint ${over ? 'over' : ''}">${hint}</div>
+        </div>`;
+    }
 
-                if (data.ledger_budget > 0) {
-                    let max_total = Math.max(data.budget_expense, data.ledger_budget);
-                    let colorWarning = data.budget_expense > data.ledger_budget ? 'color: var(--color-danger);' : '';
-                    budgetHtml += `
-                        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
-                            전체 예산 <span style="${colorWarning}">(${data.budget_expense.toLocaleString()} / ${data.ledger_budget.toLocaleString()})</span>
-                        </div>
-                        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
-                    `;
-                    for(let payer in data.payer_expense) {
-                        if (max_total > 0) {
-                            let pct = (data.payer_expense[payer] / max_total) * 100;
-                            budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
-                        }
-                    }
-                    budgetHtml += `</div>`;
-                } else if (data.budget_expense > 0) {
-                    budgetHtml += `
-                        <div style="font-size: 14px; font-weight: 700; margin-bottom: 4px;">
-                            총 지출 <span style="color: var(--color-secondary);">(${data.budget_expense.toLocaleString()})</span>
-                        </div>
-                        <div style="width: 100%; height: 10px; background: var(--color-line); border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 16px;">
-                    `;
-                    for(let payer in data.payer_expense) {
-                        let pct = (data.payer_expense[payer] / data.budget_expense) * 100;
-                        budgetHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
-                    }
-                    budgetHtml += `</div>`;
-                }
-                
-                let hasExtra = false;
-                let extraHtml = '';
-                
-                data.budget_status.forEach(b => {
-                    let isExceeded = b.spent > b.budget;
-                    let colorStyle = (b.budget > 0 && isExceeded) ? 'color: var(--color-danger); font-weight: 700;' : '';
-                    let max_val = Math.max(b.spent, b.budget);
-                    
-                    let barsHtml = '';
-                    for(let payer in b.payers) {
-                        if (b.spent > 0) {
-                            let pct = (b.payers[payer] / (b.budget > 0 ? max_val : b.spent)) * 100;
-                            barsHtml += `<div style="height: 100%; width: ${pct}%; background: ${window.safeColor(data.payer_color_map[payer])};"></div>`;
-                        }
-                    }
+    function insightsCard(d) {
+        if (!d.insights.length) return '';
+        const ico = {critical: 'alert', warning: 'alert', good: 'check', info: 'info'};
+        const label = {critical: '초과', warning: '주의', good: '좋아요', info: '참고'};
+        return `<div class="card tight">${d.insights.map(i =>
+            `<div class="insight ${i.level}">${window.ICONS[ico[i.level]]}<span><span class="sr-only">${label[i.level]}: </span>${esc(i.text)}</span></div>`).join('')}</div>`;
+    }
 
-                    let valStr = b.budget > 0 ? `${b.spent.toLocaleString()} / ${b.budget.toLocaleString()}` : `${b.spent.toLocaleString()}`;
-                    let itemHtml = `
-                        <div style="margin-bottom: 8px;">
-                            <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--color-secondary); margin-bottom: 2px;">
-                                <span>${window.escapeHtml(b.name)}</span>
-                                <span style="${colorStyle}">${valStr}</span>
-                            </div>
-                            <div style="width: 100%; height: 6px; background: var(--color-line); border-radius: 3px; overflow: hidden; display: flex;">
-                                ${barsHtml}
-                            </div>
-                        </div>
-                    `;
-                    
-                    if (b.budget > 0) budgetHtml += itemHtml;
-                    else { hasExtra = true; extraHtml += itemHtml; }
-                });
-                
-                if (hasExtra) {
-                    budgetHtml += `
-                    <div id="extra-budget-wrapper-${uid}" class="slide-wrapper">
-                        <div class="slide-inner">
-                            <div style="border-top: 1px dashed var(--color-line); padding-top: 16px;">
-                                ${extraHtml}
-                            </div>
-                        </div>
-                    </div>
-                    <div style="text-align: center; margin-top: 12px;">
-                        <button type="button" class="chip" onclick="window.toggleSlide('extra-budget-wrapper-${uid}', 'budget-arrow-${uid}')" style="background: transparent; color: var(--color-secondary); border: 1px solid var(--color-line); font-size: 12px; padding: 6px 16px;">
-                            예산 미설정 분류 보기 <span id="budget-arrow-${uid}" class="arrow-icon">▼</span>
-                        </button>
-                    </div>
-                    `;
-                }
+    function peopleCard(d) {
+        if (!d.people.length) return '';
+        const total = d.people.reduce((s, p) => s + p.amount, 0);
+        return `<div class="card">
+            <div class="section-head"><h2>누가 얼마나 썼을까</h2></div>
+            <div class="stack" role="img" aria-label="${d.people.map(p => `${esc(p.name)} ${p.share}%`).join(', ')}">
+                ${d.people.map(p => `<span style="width:${total ? p.amount / total * 100 : 0}%;background:${window.safeColor(p.color)}"></span>`).join('')}</div>
+            <div style="margin-top: 10px;">${d.people.map(p => `
+                <div class="person-row"><span class="dot" style="background:${window.safeColor(p.color)}"></span>
+                    <span class="name">${esc(p.name)}</span><span class="muted num">${p.share}%</span>
+                    <b class="num" style="min-width:96px;text-align:right">${won(p.amount)}</b></div>`).join('')}</div>
+        </div>`;
+    }
 
-                let payers = Object.keys(data.payer_color_map);
-                if(payers.length > 0) {
-                    budgetHtml += `
-                    <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; margin-bottom: 4px; justify-content: center; align-items: center; background: rgba(0,0,0,0.02); padding: 10px 12px; border-radius: 8px;">
-                        <span style="font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-right: 4px;">참여자</span>`;
-                    payers.forEach(payer => {
-                        budgetHtml += `
-                        <div style="display: flex; align-items: center; gap: 6px;">
-                            <div style="width: 12px; height: 12px; border-radius: 3px; background: ${window.safeColor(data.payer_color_map[payer])};"></div>
-                            <span style="font-size: 12px; color: var(--color-foreground); font-weight: 600;">${window.escapeHtml(payer)}</span>
-                        </div>`;
-                    });
-                    budgetHtml += `</div>`;
-                }
-                
-                budgetHtml += `</div>`;
-            }
+    function categoryCard(d) {
+        if (!d.categories.length) return '';
+        const max = Math.max(...d.categories.map(c => c.amount));
+        const rows = d.categories.map(c => {
+            let ch = '';
+            if (c.change_pct !== null && c.change_pct !== 0) ch = `<span class="change ${c.change_pct > 0 ? 'up' : 'down'}">${c.change_pct > 0 ? '▲' : '▼'}${Math.abs(c.change_pct)}%</span>`;
+            else if (c.id && c.prev_amount === 0) ch = `<span class="change muted">새로 생김</span>`;
+            const inner = `
+                <span class="dot" style="background:${window.safeColor(c.color)}"></span>
+                <div class="grow">
+                    <div style="display:flex;justify-content:space-between;gap:8px;">
+                        <span class="title">${esc(c.name)}</span><b class="num">${won(c.amount)}</b></div>
+                    <div class="meta"><span>${c.share}%</span>${ch ? '·' + ch : ''}</div>
+                    <div class="bar"><span style="width:${max ? c.amount / max * 100 : 0}%"></span></div>
+                </div>`;
+            return c.id
+                ? `<a class="list-row cat-row" href="/transactions?category_id=${c.id}&year=${d.year}&month=${d.month}&tx_type=지출">${inner}</a>`
+                : `<div class="list-row cat-row">${inner}</div>`;
+        }).join('');
+        const budgets = d.category_budgets.length ? `
+            <div class="divider"></div>
+            <div class="section-head" style="margin-bottom:8px;"><h2 style="font-size:15px;">분류별 예산</h2><a class="more" href="/settings#budget">설정 ${window.ICONS['chevron-right']}</a></div>
+            ${d.category_budgets.map(b => {
+                const over = b.spent > b.budget;
+                return `<div style="padding:6px 0;"><div style="display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px;">
+                    <span>${esc(b.name)}</span><span class="num ${over ? 'expense-text' : 'sub'}">${won(b.spent)} / ${won(b.budget)}</span></div>
+                    <div class="meter thin" role="img" aria-label="${esc(b.name)} 예산 ${b.used_pct}% 사용"><div class="fill" style="width:${Math.min(b.used_pct, 100)}%;background:${over ? 'var(--critical)' : b.used_pct >= 80 ? 'var(--warning)' : 'var(--brand)'}"></div></div></div>`;
+            }).join('')}` : '';
+        return `<div class="card">
+            <div class="section-head"><h2>어디에 썼을까</h2><a class="more" href="/analysis?year=${d.year}&month=${d.month}">분석 ${window.ICONS['chevron-right']}</a></div>
+            <div class="list">${rows}</div>${budgets}
+            <p class="caption" style="margin-top:8px;">${esc(d.compare_label)} 대비 · 분류를 누르면 내역을 볼 수 있어요</p>
+        </div>`;
+    }
 
-            let html = `
-                <div class="card">
-                    <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">이번 달 요약</h2>
-                    <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(34, 181, 127, 0.08); border-radius: var(--radius-action);">
-                            <div style="font-size: 14px; color: var(--color-secondary);">총 수입</div>
-                            <div id="incomeAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-action); overflow: hidden;">+${data.monthly_income.toLocaleString()}원</div>
-                        </div>
-                        <div style="flex: 1; min-width: 0; padding: 16px; background: rgba(240, 104, 90, 0.08); border-radius: var(--radius-action);">
-                            <div style="font-size: 14px; color: var(--color-secondary);">총 지출</div>
-                            <div id="expenseAmt_${uid}" style="font-size: 18px; font-weight: 700; color: var(--color-danger); overflow: hidden;">-${data.budget_expense.toLocaleString()}원</div>
-                        </div>
-                    </div>
-                    ${budgetHtml}
+    function recentCard(d) {
+        if (!d.recent.length) return '';
+        return `<div class="card">
+            <div class="section-head"><h2>최근 내역</h2><a class="more" href="/transactions?year=${d.year}&month=${d.month}">전체 ${window.ICONS['chevron-right']}</a></div>
+            <div class="list">${d.recent.map(t => `
+                <button type="button" class="list-row" onclick="window.homeEdit(${t.id})">
+                    <span class="avatar" style="background:${window.safeColor(t.category_color)}">${esc((t.category || '?').slice(0, 1))}</span>
+                    <div class="grow"><div class="title">${esc(t.title || t.category)}</div>
+                        <div class="meta"><span class="dot" style="width:8px;height:8px;background:${window.safeColor(t.transactor_color)}"></span>${esc(t.transactor)} · ${esc(t.category)} · ${t.date.slice(5).replace('-', '.')}</div></div>
+                    <span class="amount ${t.tx_type === '수입' ? 'income-text' : ''}">${t.tx_type === '수입' ? '+' : '-'}${won(t.amount)}</span>
+                </button>`).join('')}</div>
+        </div>`;
+    }
+
+    function render(d) {
+        window.homeData = d;
+        const body = document.getElementById('home-body');
+        if (!d.has_data) {
+            body.innerHTML = `<div class="card"><div class="empty">
+                <p style="font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;">${d.month}월에 기록된 내역이 없어요</p>
+                <p style="margin-bottom:16px;">아래 + 버튼으로 첫 내역을 추가해보세요.</p>
+                <button type="button" class="btn small" onclick="window.openTxSheet()">내역 추가하기</button></div></div>`;
+            return;
+        }
+        const periodLabel = d.is_current ? `${d.month}월 1일부터 오늘까지 지출` : `${d.month}월 지출`;
+        body.innerHTML = `
+            <div class="card">
+                <div class="hero-label">${periodLabel}</div>
+                <div class="hero-value">${won(d.expense)}</div>
+                ${deltaChip(d)}
+                <div class="kpis">
+                    <div class="kpi"><div class="k">수입</div><div class="v income-text">+${won(d.income)}</div></div>
+                    <div class="kpi"><div class="k">수입 − 지출</div><div class="v" style="color:${d.net >= 0 ? 'var(--text)' : 'var(--expense)'}">${d.net >= 0 ? '+' : '−'}${won(Math.abs(d.net))}</div></div>
                 </div>
+                ${budgetBlock(d)}
+            </div>
+            ${insightsCard(d)}
+            <div class="card">
+                <div class="section-head"><h2>누적 지출 흐름</h2></div>
+                <div class="chart-box" style="height: 190px;"><canvas id="pace-chart" role="img" aria-label="일별 누적 지출: ${d.month}월 ${won(d.expense)}"></canvas></div>
+                <div class="legend"><span><i class="line" style="background:var(--brand)"></i>${d.month}월</span><span><i class="line" style="background:var(--text-3)"></i>지난달</span>${d.budget ? '<span><i class="line" style="background:var(--warning)"></i>예산</span>' : ''}</div>
+            </div>
+            ${peopleCard(d)}
+            ${categoryCard(d)}
+            ${recentCard(d)}`;
+        drawPace(d);
+    }
 
-                <div class="card">
-                    <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">지출 분석</h3>
-                    <div style="display: flex; justify-content: center; margin-bottom: 32px;">
-                        <div style="width: 100%; max-width: 400px; height: 340px;">
-                            <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 12px; text-align: center;">카테고리별 지출 비율</h4>
-                            <canvas id="categoryChart_${uid}"></canvas>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: 32px;">
-                        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">일별 지출 누적 그래프</h4>
-                        <div style="max-width: 100%; height: 220px;">
-                            <canvas id="dayChart_${uid}"></canvas>
-                        </div>
-                    </div>
-                    <div>
-                        <h4 style="font-size: 14px; font-weight: 500; color: var(--color-secondary); margin-bottom: 8px; text-align: center;">요일별 지출 누적 그래프</h4>
-                        <div style="max-width: 100%; height: 260px;">
-                            <canvas id="dowChart_${uid}"></canvas>
-                        </div>
-                    </div>
-                </div>
-            `;
-            return html;
-        };
-
-        window.initHomeCharts = function(data, container) {
-            let uid = `${data.year}_${data.month}`;
-            window.appCharts = window.appCharts || {};
-            if(window.appCharts['dow_'+uid]) window.appCharts['dow_'+uid].destroy();
-            if(window.appCharts['day_'+uid]) window.appCharts['day_'+uid].destroy();
-            if(window.appCharts['cat_'+uid]) window.appCharts['cat_'+uid].destroy();
-
-            // 분류 색상은 마이페이지/분류 관리에서 고른 실제 색상을 그대로 사용한다.
-            const allCatNames = Object.keys(data.cat_expense_total);
-            const activeCats = allCatNames.filter(k => data.cat_expense_total[k] > 0);
-            const catDataArr = activeCats.map(k => data.cat_expense_total[k]);
-            const catColors = activeCats.map(k => data.cat_color_map[k] || '#9fa4b0');
-
-            const dowLabels = ['월', '화', '수', '목', '금', '토', '일'];
-            const datasets = activeCats.map((cat, i) => { return { label: cat, data: data.dow_expense_by_cat[cat], backgroundColor: catColors[i] }; });
-
-            const dowEl = container.querySelector('#dowChart_'+uid);
-            if(dowEl) {
-                window.appCharts['dow_'+uid] = new Chart(dowEl, { type: 'bar', data: { labels: dowLabels, datasets: datasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, display: false } }, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } } });
-            }
-
-            const dayLabels = Array.from({ length: data.days_in_month }, (_, i) => (i + 1) + '일');
-            const dayDatasets = activeCats.map((cat, i) => { return { label: cat, data: data.day_expense_by_cat[cat], backgroundColor: catColors[i] }; });
-
-            // 만원 단위로 딱 떨어지는 눈금 간격을 고른다 (예: 1만/5만/10만원 등, 몇천원 단위는 쓰지 않음)
-            window.niceMoneyStep = function(maxVal) {
-                const candidates = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000].map(n => n * 10000);
-                const rough = maxVal / 5;
-                for (const c of candidates) { if (c >= rough) return c; }
-                return candidates[candidates.length - 1];
-            };
-            const dayTotals = Array.from({ length: data.days_in_month }, (_, d) => activeCats.reduce((sum, cat) => sum + (data.day_expense_by_cat[cat][d] || 0), 0));
-            const dayStep = window.niceMoneyStep(Math.max(0, ...dayTotals));
-
-            const dayEl = container.querySelector('#dayChart_'+uid);
-            if(dayEl) {
-                window.appCharts['day_'+uid] = new Chart(dayEl, { type: 'bar', data: { labels: dayLabels, datasets: dayDatasets }, options: { maintainAspectRatio: false, scales: { x: { stacked: true, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } }, y: { stacked: true, beginAtZero: true, display: true, grid: { color: 'rgba(0,0,0,0.06)' }, ticks: { stepSize: dayStep, callback: v => v >= 10000 ? (v / 10000) + '만' : v } } }, plugins: { legend: { display: false } } } });
-            }
-
-            // 파이차트 조각 안에 카테고리 이름을 직접 표기 (너무 작은 조각은 겹쳐 보이므로 생략)
-            const pieLabelPlugin = {
-                id: 'pieLabels',
-                afterDraw(chart) {
-                    const meta = chart.getDatasetMeta(0);
-                    if (!meta || !meta.data.length) return;
-                    const ctx = chart.ctx;
-                    const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
-                    ctx.save();
-                    ctx.font = '700 11px sans-serif';
-                    ctx.fillStyle = '#fff';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    meta.data.forEach((arc, i) => {
-                        const val = chart.data.datasets[0].data[i];
-                        if (total <= 0 || val / total < 0.06) return;
-                        const pos = arc.tooltipPosition();
-                        ctx.fillText(chart.data.labels[i], pos.x, pos.y);
-                    });
-                    ctx.restore();
-                }
-            };
-
-            const catEl = container.querySelector('#categoryChart_'+uid);
-            if(catEl) {
-                window.appCharts['cat_'+uid] = new Chart(catEl, { type: 'pie', data: { labels: activeCats, datasets: [{ data: catDataArr, backgroundColor: catColors, borderWidth: 0 }] }, options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }, plugins: [pieLabelPlugin] });
-            }
-        };
-
-        // 금액이 길어져 카드 폭을 넘으면(예: 천만원대) 한 줄을 유지하도록 폰트 크기를 줄여준다.
-        window.fitText = function(el, maxSize, minSize) {
-            if (!el) return;
-            let size = maxSize;
-            el.style.whiteSpace = 'nowrap';
-            el.style.fontSize = size + 'px';
-            while (el.scrollWidth > el.clientWidth && size > minSize) {
-                size -= 1;
-                el.style.fontSize = size + 'px';
-            }
-        };
-
-        window.mountHomeSlide = function(elId, data) {
-            // prev/curr/next 슬라이드가 비동기로 갱신되는 동안 같은 uid를 가진 엘리먼트(차트 캔버스,
-            // 요약 금액 div)가 잠깐 중복될 수 있어서 (예: 이전 달로 이동 직후 slide-home-prev가 아직
-            // 옛 내용을 들고 있는 순간), document 전체가 아니라 이 슬라이드 컨테이너 안에서만 찾는다.
-            const container = document.getElementById(elId);
-            container.innerHTML = window.renderHomeSlide(data);
-            window.initHomeCharts(data, container);
-            let uid = `${data.year}_${data.month}`;
-            window.fitText(container.querySelector('#incomeAmt_'+uid), 18, 12);
-            window.fitText(container.querySelector('#expenseAmt_'+uid), 18, 12);
-        };
-
-        window.allHomeData[`${window.currentHomeY}-${window.currentHomeM}`] = window.initialHomeData;
-        window.mountHomeSlide('slide-home-curr', window.initialHomeData);
-
-        let p = window.getPrevMonth(window.currentHomeY, window.currentHomeM);
-        let n = window.getNextMonth(window.currentHomeY, window.currentHomeM);
-        window.fetchHomeData(p.y, p.m).then(d => window.mountHomeSlide('slide-home-prev', d));
-        window.fetchHomeData(n.y, n.m).then(d => window.mountHomeSlide('slide-home-next', d));
-
-        window.shiftHomeMonth = async function(dir) {
-            let slider = document.getElementById('home-slider');
-            slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
-            slider.style.transform = dir === 1 ? `translateX(-66.666%)` : `translateX(0%)`;
-            
-            if (dir === 1) {
-                let n = window.getNextMonth(window.currentHomeY, window.currentHomeM);
-                window.currentHomeY = n.y; window.currentHomeM = n.m;
-            } else {
-                let p = window.getPrevMonth(window.currentHomeY, window.currentHomeM);
-                window.currentHomeY = p.y; window.currentHomeM = p.m;
-            }
-            
-            document.getElementById('home-month-header').innerText = `${window.currentHomeY}년 ${window.currentHomeM}월`;
-            window.setStoredMonth(window.currentHomeY, window.currentHomeM);
-
-            setTimeout(async () => {
-                slider.style.transition = 'none';
-                slider.style.transform = `translateX(-33.333%)`;
-                
-                let data = await window.fetchHomeData(window.currentHomeY, window.currentHomeM);
-                window.mountHomeSlide('slide-home-curr', data);
-
-                let p = window.getPrevMonth(window.currentHomeY, window.currentHomeM);
-                let n = window.getNextMonth(window.currentHomeY, window.currentHomeM);
-                window.fetchHomeData(p.y, p.m).then(d => window.mountHomeSlide('slide-home-prev', d));
-                window.fetchHomeData(n.y, n.m).then(d => window.mountHomeSlide('slide-home-next', d));
-                
-                window.history.replaceState(null, '', `/home?year=${window.currentHomeY}&month=${window.currentHomeM}`);
-            }, 300);
-        };
-
-        // 개선: 수직 스크롤 간섭 방지를 위한 임계값(Threshold) 로직 적용
-        const view = document.getElementById('home-slider-wrapper');
-        let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
-        
-        view.addEventListener('touchstart', e => {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-            isSwiping = true;
-            isScrolling = false;
-            diffX = 0;
-            document.getElementById('home-slider').style.transition = 'none';
-        }, {passive: true});
-        
-        view.addEventListener('touchmove', e => {
-            if(!isSwiping) return;
-            let currentX = e.touches[0].clientX;
-            let currentY = e.touches[0].clientY;
-            diffX = currentX - startX;
-            let diffY = currentY - startY;
-            
-            // 처음 움직일 때 Y축 변화량이 크면 수직 스크롤로 판정하여 스와이프 차단
-            if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
-                isScrolling = true;
-            }
-            if (isScrolling) {
-                isSwiping = false;
-                return;
-            }
-            
-            let cw = view.offsetWidth;
-            let percent = (diffX / cw) * 33.333;
-            document.getElementById('home-slider').style.transform = `translateX(${-33.333 + percent}%)`;
-        }, {passive: true});
-        
-        view.addEventListener('touchend', e => {
-            if(!isSwiping) return;
-            isSwiping = false;
-            if (diffX < -60) window.shiftHomeMonth(1);
-            else if (diffX > 60) window.shiftHomeMonth(-1);
-            else {
-                document.getElementById('home-slider').style.transition = 'transform 0.3s ease';
-                document.getElementById('home-slider').style.transform = 'translateX(-33.333%)';
-            }
+    function drawPace(d) {
+        const el = document.getElementById('pace-chart');
+        if (!el || !window.Chart) return;
+        window.applyChartTheme();
+        const brand = window.cssVar('--brand'), gray = window.cssVar('--text-3'), warn = window.cssVar('--warning'), surface = window.cssVar('--surface');
+        const n = d.days_in_month;
+        const labels = Array.from({length: n}, (_, i) => i + 1);
+        const prev = labels.map((_, i) => i < d.pace.previous.length ? d.pace.previous[i] : null);
+        const cur = d.pace.current;
+        let last = -1; cur.forEach((v, i) => { if (v !== null) last = i; });
+        const datasets = [
+            { label: `${d.month}월`, data: cur, borderColor: brand, backgroundColor: hexToRgba(brand, .10), fill: 'origin', borderWidth: 2, tension: .25,
+              pointRadius: cur.map((_, i) => i === last ? 5 : 0), pointBackgroundColor: brand, pointBorderColor: surface, pointBorderWidth: 2, pointHoverRadius: 5 },
+            { label: '지난달', data: prev, borderColor: gray, borderWidth: 2, tension: .25, pointRadius: 0, pointHoverRadius: 4 },
+        ];
+        if (d.budget) datasets.push({ label: '예산', data: labels.map(() => d.budget.budget), borderColor: warn, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0 });
+        window.appCharts = window.appCharts || {};
+        if (window.appCharts.pace) window.appCharts.pace.destroy();
+        window.appCharts.pace = new Chart(el, {
+            type: 'line', data: { labels, datasets },
+            options: {
+                maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: { grid: { display: false }, border: { color: window.cssVar('--line-strong') }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6, callback: (v, i) => labels[i] + '일' } },
+                    y: { beginAtZero: true, grid: { color: window.cssVar('--line') }, border: { display: false }, ticks: { maxTicksLimit: 4, callback: v => window.wonShort(v) } },
+                },
+                plugins: { tooltip: { callbacks: { title: items => `${items[0].label}일까지`, label: it => it.raw === null ? null : ` ${it.dataset.label} ${won(it.raw)}` } } },
+            },
         });
     }
+
+    async function load(y, m, opts) {
+        opts = opts || {};
+        window.homeY = y; window.homeM = m;
+        document.getElementById('home-month-label').textContent = `${y}년 ${m}월`;
+        window.setStoredMonth(y, m);
+        window.history.replaceState(window.history.state, '', `/home?year=${y}&month=${m}`);
+        localStorage.setItem('gb_last_page', `/home?year=${y}&month=${m}`);
+        const body = document.getElementById('home-body');
+        if (!opts.fresh && cache[key(y, m)]) { render(cache[key(y, m)]); return; }
+        body.classList.add('is-refreshing');
+        try {
+            const res = await fetch(`/api/home_data?year=${y}&month=${m}`);
+            if (!res.ok) throw new Error();
+            const d = await res.json();
+            cache[key(y, m)] = d;
+            if (window.homeY === y && window.homeM === m) render(d);
+        } catch (e) {
+            window.showToast('데이터를 불러오지 못했어요.', 'error');
+        } finally { body.classList.remove('is-refreshing'); }
+    }
+
+    window.homeShift = function(dir) {
+        const t = dir > 0 ? window.getNextMonth(window.homeY, window.homeM) : window.getPrevMonth(window.homeY, window.homeM);
+        load(t.y, t.m);
+    };
+    window.onMonthJump = (y, m) => load(y, m);
+    window.onTxChanged = () => { Object.keys(cache).forEach(k => delete cache[k]); load(window.homeY, window.homeM, {fresh: true}); };
+    window.homeEdit = function(id) {
+        const t = (window.homeData.recent || []).find(x => x.id === id);
+        if (t) window.openTxSheet({tx: t});
+    };
+
+    // 좌우로 밀어서 달 이동
+    const area = document.getElementById('home-body');
+    let sx = 0, sy = 0, tracking = false;
+    area.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; tracking = true; }, {passive: true});
+    area.addEventListener('touchend', e => {
+        if (!tracking) return; tracking = false;
+        const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+        if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.5 && !e.target.closest('canvas')) window.homeShift(dx < 0 ? 1 : -1);
+    }, {passive: true});
+
+    render(window.homeInitial);
+}
 </script>
 {% endblock %}

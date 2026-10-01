@@ -11,23 +11,27 @@
     <meta property="og:url" content="{{ request.url }}">
 
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+    <meta name="theme-color" content="#F4F5F8">
+    <script>
+        (function() { try { var t = localStorage.getItem('gb_theme'); if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t); } catch (e) {} })();
+    </script>
     <style>
-        :root {
-            --color-primary: #22B57F; --color-action: #17945F; --color-canvas: #ffffff;
-            --color-foreground: #111111; --color-secondary: #555c68; --color-line: #f0f2f5;
-            --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
-        }
-        body { font-family: var(--font-sans); background-color: var(--color-canvas); color: var(--color-foreground); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
-        .splash-logo { width: 56px; height: 56px; border-radius: 14px; }
+        :root { --bg: #F4F5F8; --surface: #FFFFFF; --text: #16181D; --text-2: #4B5160; --line: #E6E8EE; --brand: #4F5BD5; --on-brand: #fff;
+                --font-sans: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; }
+        @media (prefers-color-scheme: dark) { :root:where(:not([data-theme="light"])) { --bg: #0F1115; --surface: #1A1D23; --text: #F2F3F5; --text-2: #B6BBC6; --line: #2C303A; --brand: #8F98FF; --on-brand: #0F1115; } }
+        :root[data-theme="dark"] { --bg: #0F1115; --surface: #1A1D23; --text: #F2F3F5; --text-2: #B6BBC6; --line: #2C303A; --brand: #8F98FF; --on-brand: #0F1115; }
+        html { background: var(--bg); }
+        body { font-family: var(--font-sans); background-color: var(--bg); color: var(--text); margin:0; display:flex; flex-direction: column; justify-content:center; align-items:center; gap: 16px; height:100vh; }
+        .splash-logo { width: 64px; height: 64px; border-radius: 18px; }
         .splash-wordmark-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-        .splash-wordmark { color: var(--color-foreground); font-size: 16px; font-weight: 800; letter-spacing: 0.3px; }
-        .splash-ledger-name { color: var(--color-secondary); font-size: 12px; }
-        .splash-progress-track { width: 140px; height: 4px; border-radius: 2px; background: var(--color-line); overflow: hidden; margin-top: 4px; }
-        .splash-progress-fill { width: 0%; height: 100%; background: var(--color-action); border-radius: 2px; transition: width 0.25s ease; }
+        .splash-wordmark { color: var(--text); font-size: 17px; font-weight: 800; letter-spacing: -0.02em; }
+        .splash-ledger-name { color: var(--text-2); font-size: 13px; }
+        .splash-progress-track { width: 140px; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; margin-top: 4px; }
+        .splash-progress-fill { width: 0%; height: 100%; background: var(--brand); border-radius: 2px; transition: width 0.25s ease; }
 
-        dialog { border: 1px solid var(--color-line); border-radius: 24px; padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--color-canvas); box-shadow: 0 17px 50px rgba(0,0,0,.19); box-sizing: border-box; }
-        dialog::backdrop { background: rgba(17, 17, 17, 0.4); }
-        .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--color-action); color: var(--color-canvas); border-radius: 16px; padding: 12px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; width: 100%; box-sizing: border-box; }
+        dialog { border: none; border-radius: 20px; padding: 24px; width: 90%; max-width: 400px; margin: auto; background: var(--surface); color: var(--text); box-shadow: 0 17px 50px rgba(0,0,0,.25); box-sizing: border-box; }
+        dialog::backdrop { background: rgba(16, 18, 24, 0.45); }
+        .btn-action { display: inline-flex; align-items: center; justify-content: center; background-color: var(--brand); color: var(--on-brand); border-radius: 14px; padding: 13px 20px; font-size: 16px; font-weight: 700; border: none; cursor: pointer; text-decoration: none; width: 100%; box-sizing: border-box; }
     </style>
 </head>
 <body>
@@ -91,9 +95,9 @@
 
     <dialog id="db-error-dialog">
         <div style="text-align: center; padding: 10px 0;">
-            <div style="font-size: 40px; margin-bottom: 16px;">⏳</div>
-            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">DB 연결 지연</h3>
-            <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 24px; line-height: 1.5;">
+            
+            <h3 style="font-size: 18px; font-weight: 700; margin-bottom: 8px;">서버 연결이 지연되고 있어요</h3>
+            <p style="font-size: 14px; color: var(--text-2); margin-bottom: 24px; line-height: 1.5;">
                 현재 서버 접속이 원활하지 않습니다.<br>아래 버튼을 눌러 다시 시도해주세요.
             </p>
             <button type="button" class="btn-action" onclick="window.location.reload();">새로고침 시도하기</button>

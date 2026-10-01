@@ -1,36 +1,37 @@
 {% extends "base.html" %}
+{% from '_icons.html' import icon %}
 {% block content %}
-<h2 style="text-align: center; margin-top: 40px; font-size: 24px; font-weight: 800; color: var(--color-primary);">가계쀼 시작하기</h2>
-<p style="text-align: center; color: var(--color-secondary); font-size: 14px; margin-bottom: 32px;">환영합니다! 가계부를 생성하거나 초대 코드로 참여해주세요.</p>
+<style> body { padding-bottom: 24px; } </style>
+<div style="text-align: center; padding: 36px 8px 20px;">
+    <img src="/static/icon-192.png" alt="" style="width: 72px; height: 72px; border-radius: 20px; margin-bottom: 16px;">
+    <h1 style="font-size: 24px; font-weight: 800; letter-spacing: -0.02em;">환영해요!</h1>
+    <p class="sub" style="margin-top: 6px;">새 가계부를 만들거나, 받은 초대 코드로 참여하세요.</p>
+</div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">새 가계부 만들기</h3>
+    <div class="section-head"><h2>새 가계부 만들기</h2></div>
     <form action="/onboarding" method="POST">
-        <!-- SPA 통신 시 확실한 분기를 위한 hidden input -->
         <input type="hidden" name="action" value="create">
-        <div class="input-wrapper" style="margin-bottom: 16px;">
-            <input type="text" name="ledger_name" maxlength="100" class="input-field" placeholder="가계부 이름 (예: 우리집 가계부)" required>
-        </div>
-        <button type="submit" class="btn-action" style="width: 100%;">생성하기</button>
+        <div class="field"><input type="text" name="ledger_name" maxlength="100" class="input-field" placeholder="가계부 이름 (예: 우리집 가계부)" required aria-label="가계부 이름"></div>
+        <button type="submit" class="btn">만들기</button>
     </form>
+    <p class="caption" style="margin-top: 10px;">만든 뒤 마이페이지에서 초대 링크를 보내면 둘이 함께 쓸 수 있어요.</p>
 </div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">초대 코드로 참여하기</h3>
+    <div class="section-head"><h2>초대 코드로 참여하기</h2></div>
     <form action="/onboarding" method="POST">
-        <!-- SPA 통신 시 확실한 분기를 위한 hidden input -->
         <input type="hidden" name="action" value="join">
-        <div class="input-wrapper" style="margin-bottom: 16px;">
-            <input type="text" name="invite_code" class="input-field" placeholder="전달받은 초대 코드" required>
-        </div>
-        <button type="submit" class="btn-action" style="width: 100%; background-color: var(--color-secondary);">참여하기</button>
+        <div class="field"><input type="text" name="invite_code" class="input-field" placeholder="받은 초대 코드" required aria-label="초대 코드"></div>
+        <button type="submit" class="btn secondary">참여하기</button>
     </form>
 </div>
+
+<div style="text-align: center; margin-top: 12px;"><a href="/logout" class="caption no-spa">다른 계정으로 로그인</a></div>
 
 {% if error %}
 <script>
     window.showToast({{ error | tojson }}, 'error');
 </script>
 {% endif %}
-
 {% endblock %}

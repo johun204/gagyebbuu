@@ -1,14 +1,18 @@
-const CACHE_NAME = 'gagye-bbu-cache-v7';
+const CACHE_NAME = 'gagye-bbu-cache-v8';
 const STATIC_URLS = [
     '/',
     '/home',
     '/calendar',
     '/transactions',
+    '/analysis',
     '/settings',
     '/static/manifest.json',
+    '/static/icon-32.png',
+    '/static/icon-180.png',
     '/static/icon-192.png',
     '/static/icon-512.png',
-    'https://cdn.jsdelivr.net/npm/chart.js',
+    '/static/txsuggest.js',
+    '/static/vendor/chart-4.5.1.umd.min.js',
     'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css'
 ];
 

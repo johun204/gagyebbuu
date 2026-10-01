@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 from models import db, User, Category, Transaction
 from helpers import (spa_redirect, get_or_create_uncategorized, month_range, require_ledger, json_error,
                      parse_amount, parse_int, parse_datetime, parse_year_month, clean_text, safe_next_url,
-                     resolve_transactor, TransactorInfo, TX_TYPES, UNCATEGORIZED, MAX_TITLE_LEN, MAX_MEMO_LEN)
+                     resolve_transactor, TransactorInfo, serialize_tx, norm_color, TX_TYPES, UNCATEGORIZED, MAX_TITLE_LEN, MAX_MEMO_LEN)
 from blueprints.push import notify_partner
 
 transactions_bp = Blueprint('transactions', __name__)
@@ -96,8 +96,16 @@ def transactions():
     default_start = start.strftime('%Y-%m-%d')
     default_end = (end - timedelta(days=1)).strftime('%Y-%m-%d')
 
+    # 홈/분석 화면에서 분류나 구분을 눌러 들어온 경우 그 조건으로 바로 검색해 보여준다.
+    init_category_id = parse_int(request.args.get('category_id'))
+    if init_category_id not in {c.id for c in categories}:
+        init_category_id = None
+    init_tx_type = request.args.get('tx_type') if request.args.get('tx_type') in TX_TYPES else ''
+
     return render_template('transactions.html', ledger=ledger, current_user=user,
                            categories=categories, now=now,
+                           init_category_id=init_category_id, init_tx_type=init_tx_type,
+                           init_keyword=clean_text(request.args.get('keyword'), MAX_TITLE_LEN),
                            default_start=default_start, default_end=default_end, current_tab='transactions')
 
 
@@ -106,7 +114,7 @@ def transactions():
 def api_transactions():
     ledger = g.ledger
     page = max(parse_int(request.args.get('page')) or 1, 1)
-    per_page = 10
+    per_page = 20
 
     query = Transaction.query.filter(Transaction.ledger_id == ledger.id)
 
@@ -151,26 +159,19 @@ def api_transactions():
         query = query.filter(Transaction.exclude_analysis.is_(True))
 
     total_count = query.count()
+    # 검색 조건에 맞는 전체 내역의 수입/지출 합계 (목록 위 요약용)
+    sums = dict(query.with_entities(Transaction.tx_type, db.func.coalesce(db.func.sum(Transaction.amount), 0))
+                .group_by(Transaction.tx_type).all())
 
     paginated_txs = query.options(joinedload(Transaction.category), joinedload(Transaction.user)) \
         .order_by(Transaction.datetime_val.desc(), Transaction.id.desc()) \
         .offset((page - 1) * per_page).limit(per_page).all()
 
     tinfo = TransactorInfo(ledger)
-    result = []
-    for tx in paginated_txs:
-        result.append({
-            'id': tx.id, 'tx_type': tx.tx_type, 'date': tx.datetime_val.strftime('%Y-%m-%d'),
-            'time': tx.datetime_val.strftime('%H:%M'), 'category': tx.category.name,
-            'category_id': tx.category_id,
-            'transactor': tx.transactor, 'transactor_color': tinfo.color(tx),
-            'transactor_value': tinfo.form_value(tx),
-            'title': tx.title, 'memo': tx.memo,
-            'amount': tx.amount, 'nickname': tx.user.nickname,
-            'exclude_analysis': tx.exclude_analysis, 'exclude_budget': tx.exclude_budget
-        })
+    result = [dict(serialize_tx(tx, tinfo), nickname=tx.user.nickname) for tx in paginated_txs]
 
-    return jsonify({'transactions': result, 'has_next': page * per_page < total_count, 'total_count': total_count})
+    return jsonify({'transactions': result, 'has_next': page * per_page < total_count, 'total_count': total_count,
+                    'sum_expense': int(sums.get('지출', 0)), 'sum_income': int(sums.get('수입', 0))})
 
 
 @transactions_bp.route('/api/title_suggest')
@@ -231,7 +232,7 @@ def api_category_suggest():
         ordered.append(uncat)
 
     return jsonify({
-        'items': [{'id': c.id, 'name': c.name, 'color': c.color} for c in ordered],
+        'items': [{'id': c.id, 'name': c.name, 'color': norm_color(c.color)} for c in ordered],
         'matched_id': matched_id,
     })
 
@@ -313,8 +314,8 @@ def edit_transaction(tx_id):
     categories = Category.query.filter_by(ledger_id=ledger.id).order_by(Category.sort_order.asc(), Category.id.asc()).all()
     next_url = safe_next_url(request.args.get('next'), '')
     tinfo = TransactorInfo(ledger)
-    return render_template('edit_transaction.html', tx=tx, ledger=ledger, categories=categories, next_url=next_url,
-                           transactor_value=tinfo.form_value(tx), current_tab='transactions')
+    return render_template('edit_transaction.html', tx=tx, ledger=ledger, current_user=user, categories=categories,
+                           next_url=next_url, tx_json=serialize_tx(tx, tinfo), current_tab='transactions')
 
 
 @transactions_bp.route('/transaction/<int:tx_id>/delete', methods=['POST'])

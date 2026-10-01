@@ -4,9 +4,26 @@ from functools import wraps
 from flask import request, redirect, jsonify, url_for, g
 from models import db, User, Ledger, Category
 
-# 사용자/'함께'/분류에 랜덤 배정되는 색상 풀 (홈 화면 차트에서도 그대로 사용)
-COLOR_PALETTE = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0']
-FALLBACK_COLOR = '#9fa4b0'
+# 사용자/'함께'/분류에 배정되는 색상 풀 (차트에서 사람·분류를 구분하는 색).
+# 색약(CVD) 구분도와 명도 대역을 검증한 8색 팔레트이며, 다크 모드에서는 화면 쪽에서
+# 같은 슬롯의 다크용 색(static 쪽 SERIES_DARK)으로 바꿔 그린다.
+COLOR_PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
+FALLBACK_COLOR = '#8b909c'
+
+# 예전 10색 팔레트로 이미 저장된 색 -> 새 팔레트의 비슷한 색. DB 값은 그대로 두고 화면에 낼 때만 바꾼다.
+LEGACY_COLOR_MAP = {
+    '#22b57f': '#008300', '#f0a94e': '#eda100', '#3fadd6': '#2a78d6', '#c876c2': '#e87ba4',
+    '#eb7a6e': '#eb6834', '#f0cb5c': '#eda100', '#8f79d6': '#4a3aa7', '#4fc2d6': '#2a78d6',
+    '#e0a0d6': '#e87ba4', '#4fbfa0': '#1baf7a',
+}
+
+
+def norm_color(color, fallback=FALLBACK_COLOR):
+    """저장된 색을 현재 팔레트 색으로. 예전 팔레트 색은 대응 색으로, 알 수 없는 값은 fallback."""
+    c = (color or '').strip().lower()
+    if c in COLOR_PALETTE:
+        return c
+    return LEGACY_COLOR_MAP.get(c, fallback)
 
 TX_TYPES = ('수입', '지출')
 TOGETHER = '함께'
@@ -23,7 +40,8 @@ MAX_AMOUNT = 999_999_999_999
 
 
 def pick_random_color(existing_colors):
-    unused = [c for c in COLOR_PALETTE if c not in existing_colors]
+    existing = {norm_color(c, None) for c in existing_colors}
+    unused = [c for c in COLOR_PALETTE if c not in existing]
     pool = unused if unused else COLOR_PALETTE
     return random.choice(pool)
 
@@ -188,9 +206,9 @@ class TransactorInfo:
 
     def color(self, tx):
         if tx.transactor == TOGETHER:
-            return self.ledger.together_color or FALLBACK_COLOR
+            return norm_color(self.ledger.together_color)
         u = self.member(tx)
-        return (u.color if u else None) or FALLBACK_COLOR
+        return norm_color(u.color if u else None)
 
     def key(self, tx):
         """참여자별 집계에 쓰는 이름: 현재 참여자면 현재 닉네임으로 묶는다."""
@@ -202,3 +220,18 @@ class TransactorInfo:
     def form_value(self, tx):
         """수정 시트의 거래자 버튼(현재 닉네임 기준)을 맞게 선택하기 위한 값."""
         return self.key(tx)
+
+
+def serialize_tx(tx, tinfo):
+    """화면(목록/달력/홈/수정 시트)에서 공통으로 쓰는 내역 JSON."""
+    cat = tx.category
+    return {
+        'id': tx.id, 'tx_type': tx.tx_type,
+        'date': tx.datetime_val.strftime('%Y-%m-%d'), 'time': tx.datetime_val.strftime('%H:%M'),
+        'title': tx.title, 'memo': tx.memo or '', 'amount': tx.amount,
+        'category': cat.name if cat else UNCATEGORIZED, 'category_id': tx.category_id,
+        'category_color': norm_color(cat.color if cat else None),
+        'transactor': tx.transactor, 'transactor_color': tinfo.color(tx),
+        'transactor_value': tinfo.form_value(tx),
+        'exclude_analysis': bool(tx.exclude_analysis), 'exclude_budget': bool(tx.exclude_budget),
+    }

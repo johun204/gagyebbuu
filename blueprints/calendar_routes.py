@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, jsonify, g
 from sqlalchemy.orm import joinedload
 
 from models import Category, Transaction
-from helpers import get_target_date, month_range, require_ledger, json_error, parse_year_month, TransactorInfo
+from helpers import get_target_date, month_range, require_ledger, json_error, parse_year_month, TransactorInfo, serialize_tx
 
 calendar_bp = Blueprint('calendar', __name__)
 
@@ -31,17 +31,7 @@ def build_calendar_data(ledger, y, m):
         if tx.tx_type == '수입': daily_totals[d_str]['income'] += tx.amount
         else: daily_totals[d_str]['expense'] += tx.amount
 
-        tx_by_date[d_str].append({
-            'id': tx.id, 'tx_type': tx.tx_type, 'title': tx.title, 'transactor': tx.transactor,
-            'transactor_color': tinfo.color(tx),
-            'transactor_value': tinfo.form_value(tx),
-            'amount': tx.amount, 'category': tx.category.name, 'time': tx.datetime_val.strftime('%H:%M'),
-            'memo': tx.memo,
-            'exclude_analysis': tx.exclude_analysis,
-            'exclude_budget': tx.exclude_budget,
-            'category_id': tx.category_id,
-            'date': d_str
-        })
+        tx_by_date[d_str].append(serialize_tx(tx, tinfo))
 
     cal = py_calendar.Calendar(firstweekday=6)
     month_days = cal.monthdayscalendar(y, m)

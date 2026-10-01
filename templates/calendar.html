@@ -1,577 +1,222 @@
 {% extends "base.html" %}
+{% from '_icons.html' import icon %}
 {% block content %}
 <style>
-    input[type="date"], input[type="time"], input[type="text"], select { width: 100%; max-width: 100%; box-sizing: border-box; appearance: none; -webkit-appearance: none; }
-    .flex-row > .input-wrapper { flex: 1 1 0px; min-width: 0; }
-
-    @media (max-width: 480px) { .amt-full { display: none !important; } .amt-short { display: inline !important; } }
-    @media (min-width: 481px) { .amt-full { display: inline !important; } .amt-short { display: none !important; } }
-
     #calendar-slider-wrapper { overflow: hidden; width: 100%; position: relative; touch-action: pan-y; }
-    #calendar-slider { display: flex; width: 300%; transform: translateX(-33.333%); will-change: transform; }
-    .calendar-slide { width: 33.333%; flex-shrink: 0; padding: 0 4px; box-sizing: border-box; }
-
-    .fab { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 84px); right: 20px; width: 56px; height: 56px; border-radius: 28px; background: var(--color-action); color: #fff; font-size: 28px; font-weight: 300; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(23, 148, 95, 0.4); z-index: 999; cursor: pointer; border: none; text-decoration: none; }
-    #bottom-sheet-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.3s ease; }
-    #bottom-sheet-overlay.active { opacity: 1; pointer-events: auto; }
-    #bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--color-canvas); border-radius: 24px 24px 0 0; padding: 24px; z-index: 1002; transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
-    #bottom-sheet.active { transform: translateY(0); }
-    
-    .btn-tab { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--color-line); background: var(--color-canvas); color: var(--color-muted); font-weight: 700; font-size: 14px; cursor: pointer; transition: all 0.2s; }
-    .btn-tab.active { background: var(--color-action); color: var(--color-canvas); border-color: var(--color-action); }
+    #calendar-slider { display: flex; align-items: flex-start; width: 300%; transform: translateX(-33.333%); will-change: transform; }
+    .calendar-slide { width: 33.333%; flex-shrink: 0; }
+    .cal-week, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); }
+    .cal-week { text-align: center; font-size: 12px; font-weight: 600; color: var(--text-3); margin-bottom: 6px; }
+    .cal-week .sun { color: var(--expense); } .cal-week .sat { color: var(--brand); }
+    .cal-grid { gap: 4px; }
+    .cal-cell { min-height: 58px; border-radius: 12px; display: flex; flex-direction: column; align-items: center; padding: 5px 1px 4px; cursor: pointer; border: 2px solid transparent; background: none; font: inherit; color: inherit; overflow: hidden; }
+    .cal-cell.selected { border-color: var(--brand); }
+    .cal-cell .d { font-size: 13px; font-weight: 600; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+    .cal-cell.today .d { background: var(--brand); color: var(--on-brand); }
+    .cal-cell .inc, .cal-cell .exp { font-size: 10.5px; font-weight: 700; line-height: 1.25; letter-spacing: -0.04em; white-space: nowrap; }
+    .cal-cell .inc { color: var(--income); } .cal-cell .exp { color: var(--text); }
+    .month-sum { display: flex; gap: 14px; font-size: 13.5px; margin: -4px 0 12px; color: var(--text-2); }
+    .month-sum b { font-weight: 700; }
 </style>
 
-{% set uncat = categories | selectattr('name', 'equalto', '미분류') | first %}
-
-<div class="month-selector">
-    <a href="javascript:void(0)" onclick="window.shiftMonth(-1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></a>
-    <h3 id="cal-month-header" onclick="window.openMonthPicker(window.currentY || {{ t_year }}, window.currentM || {{ t_month }})">{{ t_year }}년 {{ t_month }}월</h3>
-    <a href="javascript:void(0)" onclick="window.shiftMonth(1)" class="no-spa"><svg class="month-arrow-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg></a>
+<div class="appbar">
+    <h1>달력</h1>
+    <div class="month-nav">
+        <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.shiftMonth(-1)" aria-label="이전 달">{{ icon('chevron-left', 20) }}</button>
+        <button type="button" class="label" id="cal-month-header" style="font-size:16px;" onclick="window.openMonthPicker(window.currentY, window.currentM)">{{ t_year }}년 {{ t_month }}월</button>
+        <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.shiftMonth(1)" aria-label="다음 달">{{ icon('chevron-right', 20) }}</button>
+    </div>
+    <a href="/settings" class="icon-btn" aria-label="설정">{{ icon('settings', 24) }}</a>
 </div>
 
-<div id="calendar-slider-wrapper">
-    <div id="calendar-slider">
-        <div id="slide-prev" class="calendar-slide"></div>
-        <div id="slide-curr" class="calendar-slide"></div>
-        <div id="slide-next" class="calendar-slide"></div>
+<div class="month-sum" id="cal-month-sum"></div>
+
+<div class="card tight" style="padding: 12px 10px;">
+    <div class="cal-week"><div class="sun">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div class="sat">토</div></div>
+    <div id="calendar-slider-wrapper">
+        <div id="calendar-slider">
+            <div id="slide-prev" class="calendar-slide"></div>
+            <div id="slide-curr" class="calendar-slide"></div>
+            <div id="slide-next" class="calendar-slide"></div>
+        </div>
     </div>
+    <p class="caption" style="margin-top: 8px; padding: 0 4px;">칸 색이 진할수록 그날 지출이 많아요</p>
 </div>
 
-<div class="card" style="padding: 16px; margin-top: 16px; margin-bottom: 24px;">
-    <!-- 오직 날짜만 표출되도록 소제목 간소화 -->
-    <h3 id="daily-list-title" style="font-size: 16px; font-weight: 700; margin-bottom: 12px; color: var(--color-foreground);"></h3>
-    <div id="daily-tx-list"></div>
+<div class="card">
+    <div class="section-head">
+        <h2 id="daily-list-title"></h2>
+        <button type="button" class="more" style="color: var(--brand); font-weight: 600;" onclick="window.openTxSheet({date: window.selectedDate})">{{ icon('plus', 16) }} 이 날 추가</button>
+    </div>
+    <div id="daily-tx-list" class="list"></div>
 </div>
-
-<button class="fab no-spa" onclick="window.openAddSheet()">+</button>
-
-<div id="bottom-sheet-overlay" onclick="window.closeBottomSheet()"></div>
-<div id="bottom-sheet">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 id="sheet-title" style="font-size: 18px; font-weight: 700;">내역 등록</h3>
-        <button type="button" class="chip" onclick="window.closeBottomSheet()" style="background: none; color: var(--color-muted); font-size: 18px; padding: 0;">✕</button>
-    </div>
-
-    <form id="cal-tx-form" method="POST">
-        <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-            <button type="button" id="cal-btn-expense" class="btn-tab active" onclick="window.setCalTxType('지출')">지출</button>
-            <button type="button" id="cal-btn-income" class="btn-tab" onclick="window.setCalTxType('수입')">수입</button>
-            <input type="hidden" name="tx_type" id="cal_tx_type" value="지출">
-        </div>
-
-        <div class="flex-row">
-            <div class="input-wrapper"><input type="text" inputmode="numeric" autocomplete="off" id="cal_amount_input" name="amount" class="input-field" placeholder="금액(원)" oninput="window.formatNumber(this)" required></div>
-        </div>
-        
-        <div id="cal-transactor-group" style="display: flex; gap: 8px; margin-bottom: 16px;">
-            {% for u in ledger.users %}
-            <button type="button" class="btn-tab {% if u.id == current_user.id %}active{% endif %}" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)">{{ u.nickname }}</button>
-            {% endfor %}
-            <button type="button" class="btn-tab" data-value="함께" onclick="window.setTransactor(this)">함께</button>
-            <input type="hidden" name="transactor" value="{{ current_user.nickname }}">
-        </div>
-
-        <div class="flex-row">
-            <div class="input-wrapper"><input type="text" autocomplete="off" id="cal_title_input" name="title" maxlength="100" class="input-field" placeholder="제목" required></div>
-        </div>
-
-        <div class="flex-row">
-            <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <input type="hidden" name="category_id" id="cal_category_select" value="{{ uncat.id if uncat else '' }}">
-                <button type="button" id="cal_category_btn" class="input-field txcat-btn" style="flex: 1;">미분류</button>
-                <!-- 내역 탭과 동일한 분류 편집 버튼 추가 -->
-                <button type="button" class="chip" onclick="window.openCatModal()" style="flex: 0 0 auto;">분류 편집</button>
-            </div>
-        </div>
-        
-        <div class="flex-row">
-            <div class="input-wrapper" style="display: flex; gap: 8px;">
-                <input type="date" name="date" id="cal_date_input" class="input-field" required style="flex: 1;">
-                <input type="hidden" name="time" id="cal_time_input" value="{{ now.strftime('%H:%M') }}">
-                <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').showModal()" style="padding: 10px 12px; font-size: 16px; flex: 0 0 auto;">🕒</button>
-            </div>
-        </div>
-        
-        <div class="flex-row" style="margin-bottom: 12px;">
-            <div class="input-wrapper"><input type="text" autocomplete="off" id="cal_memo_input" name="memo" maxlength="255" class="input-field" placeholder="상세 메모 (선택)"></div>
-        </div>
-
-        <div class="flex-row" style="margin-bottom: 8px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
-                <input type="checkbox" id="cal_exclude_budget" name="exclude_budget" style="width:16px; height:16px;"> 예산에서만 제외하기
-            </label>
-        </div>
-
-        <div class="flex-row" style="margin-bottom: 16px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--color-secondary); cursor: pointer;">
-                <input type="checkbox" id="cal_exclude_analysis" name="exclude_analysis" style="width:16px; height:16px;"> 지출분석 제외
-            </label>
-        </div>
-
-        <button type="submit" class="btn-action" style="width: 100%; margin-top: 8px;">저장하기</button>
-    </form>
-</div>
-
-<!-- 시간 설정 팝업 -->
-<dialog id="cal-time-dialog">
-    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700;">시간 설정</h3>
-        <button type="button" class="chip" onclick="document.getElementById('cal-time-dialog').close()" style="background:none;">닫기</button>
-    </div>
-    <div class="flex-row">
-        <div class="input-wrapper"><input type="time" id="cal_time_picker_input" class="input-field" value="{{ now.strftime('%H:%M') }}"></div>
-    </div>
-    <button type="button" class="btn-action" style="width:100%;" onclick="window.setCalTime()">확인</button>
-</dialog>
-
-<!-- 카테고리 편집 팝업 -->
-<dialog id="cat-dialog">
-    <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
-        <h3 style="font-size: 18px; font-weight: 700;">분류 관리</h3>
-        <button type="button" class="chip" onclick="document.getElementById('cat-dialog').close()" style="background:none;">닫기</button>
-    </div>
-    <div class="flex-row">
-        <div class="input-wrapper"><input type="text" id="new_cat_name" maxlength="50" class="input-field" placeholder="새 분류 이름"></div>
-        <button type="button" class="btn-action" onclick="window.addCat()">추가</button>
-    </div>
-    <div id="cat-list" style="max-height: 300px; overflow-y: auto;"></div>
-</dialog>
 
 <script>
-    window.initialData = {{ initial_data | tojson | safe }};
+    window.initialData = {{ initial_data | tojson }};
     window.currentY = {{ t_year }};
     window.currentM = {{ t_month }};
     window.todayDate = {{ today_date | tojson }};
 </script>
 
 <script>
-    {
-        window.allMonthsData = {};
-        window.txDataStore = {}; 
+{
+    const esc = window.escapeHtml, won = window.won;
+    window.allMonthsData = {};
+    window.txDataStore = {};
 
-        window.formatShortMoney = function(amt) {
-            if (!amt) return '';
-            if (amt < 100000) {
-                let str = (amt / 10000).toFixed(1) + '만';
-                return str.replace('.0만', '만');
-            } else {
-                return Math.floor(amt / 10000) + '만';
-            }
-        };
+    window.fetchMonthData = async function(y, m) {
+        const key = `${y}-${m}`;
+        if (window.allMonthsData[key]) return window.allMonthsData[key];
+        const res = await fetch(`/api/calendar_data?year=${y}&month=${m}`);
+        const data = await res.json();
+        window.allMonthsData[key] = data;
+        return data;
+    };
 
-        window.getPrevMonth = function(y, m) { return m === 1 ? {y: y-1, m: 12} : {y: y, m: m-1}; };
-        window.getNextMonth = function(y, m) { return m === 12 ? {y: y+1, m: 1} : {y: y, m: m+1}; };
+    function brandRgb() {
+        const h = window.cssVar('--brand').replace('#', '');
+        const n = parseInt(h, 16);
+        return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
+    }
 
-        window.fetchMonthData = async function(y, m) {
-            let key = `${y}-${m}`;
-            if (window.allMonthsData[key]) return window.allMonthsData[key];
-            let res = await fetch(`/api/calendar_data?year=${y}&month=${m}`);
-            let data = await res.json();
-            window.allMonthsData[key] = data;
-            return data;
-        };
+    window.renderCalendarGrid = function(data) {
+        const totals = Object.values(data.daily_totals).map(t => t.expense);
+        const max = Math.max(0, ...totals);
+        const rgb = brandRgb();
+        let html = '<div class="cal-grid">';
+        data.month_days.forEach(week => week.forEach((d, i) => {
+            if (d === 0) { html += '<div></div>'; return; }
+            const dateStr = `${data.year}-${String(data.month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const t = data.daily_totals[dateStr] || {income: 0, expense: 0};
+            (data.tx_by_date[dateStr] || []).forEach(tx => window.txDataStore[tx.id] = tx);
+            // 지출이 클수록 진한 한 가지 색 (0이면 투명)
+            const alpha = t.expense > 0 && max > 0 ? (0.08 + 0.32 * t.expense / max).toFixed(2) : 0;
+            const cls = ['cal-cell', dateStr === window.todayDate ? 'today' : '', dateStr === window.selectedDate ? 'selected' : ''].join(' ');
+            const dayColor = i === 0 ? 'color:var(--expense);' : i === 6 ? 'color:var(--brand);' : '';
+            html += `<button type="button" class="${cls}" id="cal-cell-${dateStr}" style="background:rgba(${rgb},${alpha})" onclick="window.selectDate('${dateStr}')"
+                        aria-label="${data.month}월 ${d}일${t.expense ? ' 지출 ' + won(t.expense) : ''}${t.income ? ' 수입 ' + won(t.income) : ''}">
+                <span class="d" style="${dateStr === window.todayDate ? '' : dayColor}">${d}</span>
+                ${t.income ? `<span class="inc">+${window.wonShort(t.income)}</span>` : ''}
+                ${t.expense ? `<span class="exp">-${window.wonShort(t.expense)}</span>` : ''}
+            </button>`;
+        }));
+        return html + '</div>';
+    };
 
-        window.renderCalendarGrid = function(data) {
-            let html = `
-            <div class="card" style="padding: 16px; margin-bottom: 0;">
-                <div style="display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; font-weight: 700; color: var(--color-secondary); margin-bottom: 12px;">
-                    <div style="color: var(--color-danger);">일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div style="color: #3FADD6;">토</div>
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; row-gap: 8px;">`;
-            
-            data.month_days.forEach((week) => {
-                week.forEach((d, i) => {
-                    if (d === 0) {
-                        html += `<div style="min-height: 50px;"></div>`;
-                    } else {
-                        let m_str = data.month.toString().padStart(2, '0');
-                        let d_str = d.toString().padStart(2, '0');
-                        let dateStr = `${data.year}-${m_str}-${d_str}`;
-                        let totals = data.daily_totals[dateStr] || {income: 0, expense: 0};
-                        let isToday = (dateStr === window.todayDate);
-                        
-                        let dayColor = 'var(--color-foreground)';
-                        if (i === 0) dayColor = 'var(--color-danger)';
-                        if (i === 6) dayColor = '#3FADD6';
-                        
-                        let numStyle = isToday ? `background: var(--color-action); color: #fff; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; margin: 0 auto;` : `color: ${dayColor};`;
-                        
-                        let incFull = totals.income > 0 ? '+' + totals.income.toLocaleString() : '';
-                        let incShort = totals.income > 0 ? '+' + window.formatShortMoney(totals.income) : '';
-                        let expFull = totals.expense > 0 ? '-' + totals.expense.toLocaleString() : '';
-                        let expShort = totals.expense > 0 ? '-' + window.formatShortMoney(totals.expense) : '';
-                        
-                        let isSelected = (dateStr === window.selectedDate) ? 'background-color: rgba(23, 148, 95, 0.1); border-radius: 8px;' : '';
+    // 현재 달 높이에 맞춰 감싸는 영역 높이를 맞춘다 (앞뒤 달이 6주여도 빈 공간이 생기지 않게)
+    function fitHeight() {
+        const curr = document.getElementById('slide-curr');
+        document.getElementById('calendar-slider-wrapper').style.height = curr.offsetHeight + 'px';
+    }
 
-                        if(data.tx_by_date[dateStr]) {
-                            data.tx_by_date[dateStr].forEach(tx => window.txDataStore[tx.id] = tx);
-                        }
+    function renderMonthSum(data) {
+        let inc = 0, exp = 0;
+        Object.values(data.daily_totals).forEach(t => { inc += t.income; exp += t.expense; });
+        document.getElementById('cal-month-sum').innerHTML = `<span>수입 <b class="income-text">+${won(inc)}</b></span><span>지출 <b>-${won(exp)}</b></span>`;
+    }
 
-                        html += `
-                        <div class="cal-cell" id="cal-cell-${dateStr}" style="min-height: 50px; display: flex; flex-direction: column; align-items: center; cursor: pointer; text-align: center; overflow: hidden; padding: 4px 0; transition: background-color 0.2s; ${isSelected}" onclick="window.selectDate('${dateStr}')">
-                            <div style="font-size: 13px; font-weight: 500; margin-bottom: 2px; ${numStyle}">${d}</div>
-                            <div style="color: var(--color-primary); font-size: 10px; font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; width: 100%; white-space: nowrap;">
-                                <span class="amt-full">${incFull}</span><span class="amt-short">${incShort}</span>
-                            </div>
-                            <div style="color: var(--color-danger); font-size: 10px; font-weight: 700; line-height: 1.1; letter-spacing: -0.5px; width: 100%; white-space: nowrap;">
-                                <span class="amt-full">${expFull}</span><span class="amt-short">${expShort}</span>
-                            </div>
-                        </div>`;
-                    }
-                });
-            });
-            html += `</div></div>`;
-            return html;
-        };
+    window.selectDate = function(dateStr) {
+        window.selectedDate = dateStr;
+        document.querySelectorAll('#slide-curr .cal-cell').forEach(el => el.classList.toggle('selected', el.id === 'cal-cell-' + dateStr));
+        document.getElementById('daily-list-title').textContent = window.getDowStr(dateStr);
 
-        window.selectDate = function(dateStr) {
-            window.selectedDate = dateStr;
-            document.querySelectorAll('.cal-cell').forEach(el => el.style.backgroundColor = '');
-            // slide-prev/curr/next가 비동기로 갱신되는 동안 같은 날짜 id가 잠깐 중복될 수 있어서
-            // (예: 이전 달로 넘긴 직후 slide-prev가 아직 옛 내용을 들고 있는 채로 남아있는 순간),
-            // document 전체가 아니라 실제 보여지는 slide-curr 안에서만 셀을 찾는다.
-            let currSlide = document.getElementById('slide-curr');
-            let cell = currSlide ? currSlide.querySelector('#cal-cell-' + dateStr) : null;
-            if(cell) cell.style.backgroundColor = 'rgba(23, 148, 95, 0.1)';
-            
-            // 날짜만 간결하게 표시
-            document.getElementById('daily-list-title').innerText = window.getDowStr(dateStr);
-            
-            let data = window.allMonthsData[`${window.currentY}-${window.currentM}`];
-            if(!data) return;
-            
-            let txs = data.tx_by_date[dateStr] || [];
-            let html = '';
-            
-            if(txs.length === 0) {
-                html = `<div style="text-align:center; color:var(--color-muted); padding: 20px 0;">해당 일자에 기록된 내역이 없습니다.</div>`;
-            } else {
-                const esc = window.escapeHtml;
-                txs.forEach(tx => {
-                    let color = tx.tx_type === '수입' ? 'var(--color-primary)' : 'var(--color-danger)';
-                    let sign = tx.tx_type === '수입' ? '+' : '-';
-                    html += `
-                    <div style="display:flex; justify-content:space-between; align-items:center; padding: 12px 0; border-bottom: 1px solid var(--color-line);">
-                        <div style="flex:1;">
-                            <div style="font-size:12px; color:var(--color-secondary); margin-bottom:4px; display:flex; align-items:center; gap:4px;">${tx.time} | <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${window.safeColor(tx.transactor_color)};"></span>${esc(tx.transactor)} | 🏷️ ${esc(tx.category)}</div>
-                            <div style="font-weight:700; font-size:15px;">${esc(tx.title)} ${tx.exclude_analysis ? '<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px;">분석제외</span>' : ''}${tx.exclude_budget ? '<span style="font-size: 10px; background: var(--color-line); color: var(--color-muted); padding: 2px 4px; border-radius: 4px; margin-left: 4px;">예산제외</span>' : ''}</div>
-                            ${tx.memo ? `<div style="font-size:12px; color:var(--color-muted); margin-top:4px; background: var(--color-line); padding: 4px 8px; border-radius: 4px; display: inline-block;">${esc(tx.memo)}</div>` : ''}
-                        </div>
-                        <div style="text-align:right; margin-left: 12px; min-width: 80px;">
-                            <div style="font-weight:700; font-size:16px; color:${color};">${sign}${tx.amount.toLocaleString()}원</div>
-                            <div style="margin-top:8px; display:flex; gap:8px; justify-content:flex-end;">
-                                <button onclick="window.openEditSheet(${tx.id})" style="background:none; border:none; color:var(--color-muted); font-size:12px; cursor:pointer; padding:0;">수정</button>
-                                <span style="color:var(--color-line);">|</span>
-                                <button onclick="window.deleteTx(${tx.id})" style="background:none; border:none; color:var(--color-muted); font-size:12px; cursor:pointer; padding:0;">삭제</button>
-                            </div>
-                        </div>
-                    </div>`;
-                });
-            }
-            document.getElementById('daily-tx-list').innerHTML = html;
-        };
-
-        window.allMonthsData[`${window.currentY}-${window.currentM}`] = window.initialData;
-        document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(window.initialData);
-        
-        let startTarget = window.todayDate;
-        if (!startTarget.startsWith(`${window.currentY}-${window.currentM.toString().padStart(2,'0')}`)) {
-            startTarget = `${window.currentY}-${window.currentM.toString().padStart(2,'0')}-01`;
+        const data = window.allMonthsData[`${window.currentY}-${window.currentM}`];
+        if (!data) return;
+        const txs = data.tx_by_date[dateStr] || [];
+        const list = document.getElementById('daily-tx-list');
+        if (!txs.length) {
+            list.innerHTML = `<div class="empty">이 날 기록된 내역이 없어요</div>`;
+            return;
         }
-        window.selectDate(startTarget);
-        
-        let p = window.getPrevMonth(window.currentY, window.currentM);
-        let n = window.getNextMonth(window.currentY, window.currentM);
+        list.innerHTML = txs.map(tx => `
+            <button type="button" class="list-row" onclick="window.openTxSheet({tx: window.txDataStore[${tx.id}]})">
+                <span class="avatar" style="background:${window.safeColor(tx.category_color)}">${esc((tx.category || '?').slice(0, 1))}</span>
+                <div class="grow">
+                    <div class="title">${esc(tx.title || tx.category)}</div>
+                    <div class="meta"><span class="dot" style="width:8px;height:8px;background:${window.safeColor(tx.transactor_color)}"></span>${esc(tx.transactor)} · ${esc(tx.category)} · ${tx.time}
+                        ${tx.exclude_analysis ? '<span class="badge">분석제외</span>' : ''}${tx.exclude_budget ? '<span class="badge">예산제외</span>' : ''}</div>
+                    ${tx.memo ? `<div class="meta" style="margin-top:2px;">${esc(tx.memo)}</div>` : ''}
+                </div>
+                <span class="amount ${tx.tx_type === '수입' ? 'income-text' : ''}">${tx.tx_type === '수입' ? '+' : '-'}${won(tx.amount)}</span>
+            </button>`).join('');
+    };
+
+    function defaultDateFor(y, m) {
+        const prefix = `${y}-${String(m).padStart(2, '0')}`;
+        return window.todayDate.startsWith(prefix) ? window.todayDate : `${prefix}-01`;
+    }
+
+    function renderNeighbors() {
+        const p = window.getPrevMonth(window.currentY, window.currentM);
+        const n = window.getNextMonth(window.currentY, window.currentM);
         window.fetchMonthData(p.y, p.m).then(d => document.getElementById('slide-prev').innerHTML = window.renderCalendarGrid(d));
         window.fetchMonthData(n.y, n.m).then(d => document.getElementById('slide-next').innerHTML = window.renderCalendarGrid(d));
-
-        window.shiftMonth = async function(dir) {
-            let slider = document.getElementById('calendar-slider');
-            slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
-            slider.style.transform = dir === 1 ? `translateX(-66.666%)` : `translateX(0%)`;
-            
-            if (dir === 1) {
-                let n = window.getNextMonth(window.currentY, window.currentM);
-                window.currentY = n.y; window.currentM = n.m;
-            } else {
-                let p = window.getPrevMonth(window.currentY, window.currentM);
-                window.currentY = p.y; window.currentM = p.m;
-            }
-            
-            document.getElementById('cal-month-header').innerText = `${window.currentY}년 ${window.currentM}월`;
-            window.setStoredMonth(window.currentY, window.currentM);
-
-            setTimeout(async () => {
-                slider.style.transition = 'none';
-                slider.style.transform = `translateX(-33.333%)`;
-                
-                let data = await window.fetchMonthData(window.currentY, window.currentM);
-                document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                
-                let p = window.getPrevMonth(window.currentY, window.currentM);
-                let n = window.getNextMonth(window.currentY, window.currentM);
-                window.fetchMonthData(p.y, p.m).then(d => document.getElementById('slide-prev').innerHTML = window.renderCalendarGrid(d));
-                window.fetchMonthData(n.y, n.m).then(d => document.getElementById('slide-next').innerHTML = window.renderCalendarGrid(d));
-                
-                window.history.replaceState(null, '', `/calendar?year=${window.currentY}&month=${window.currentM}`);
-                
-                let ts = window.todayDate;
-                if(ts.startsWith(`${window.currentY}-${window.currentM.toString().padStart(2,'0')}`)) {
-                    window.selectDate(ts);
-                } else {
-                    window.selectDate(`${window.currentY}-${window.currentM.toString().padStart(2,'0')}-01`);
-                }
-            }, 300);
-        };
-
-        const view = document.getElementById('calendar-slider-wrapper');
-        let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
-        
-        view.addEventListener('touchstart', e => {
-            startX = e.touches[0].clientX;
-            startY = e.touches[0].clientY;
-            isSwiping = true;
-            isScrolling = false;
-            diffX = 0;
-            document.getElementById('calendar-slider').style.transition = 'none';
-        }, {passive: true});
-        
-        view.addEventListener('touchmove', e => {
-            if(!isSwiping) return;
-            let currentX = e.touches[0].clientX;
-            let currentY = e.touches[0].clientY;
-            diffX = currentX - startX;
-            let diffY = currentY - startY;
-            
-            if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) {
-                isScrolling = true;
-            }
-            if (isScrolling) {
-                isSwiping = false;
-                return;
-            }
-            
-            let cw = view.offsetWidth;
-            let percent = (diffX / cw) * 33.333;
-            document.getElementById('calendar-slider').style.transform = `translateX(${-33.333 + percent}%)`;
-        }, {passive: true});
-        
-        view.addEventListener('touchend', e => {
-            if(!isSwiping) return;
-            isSwiping = false;
-            if (diffX < -60) window.shiftMonth(1);
-            else if (diffX > 60) window.shiftMonth(-1);
-            else {
-                document.getElementById('calendar-slider').style.transition = 'transform 0.3s ease';
-                document.getElementById('calendar-slider').style.transform = 'translateX(-33.333%)';
-            }
-        });
-
-        window.setCalTime = function() {
-            document.getElementById('cal_time_input').value = document.getElementById('cal_time_picker_input').value;
-            document.getElementById('cal-time-dialog').close();
-        };
-
-        window.setCalTxType = function(type) {
-            document.getElementById('cal_tx_type').value = type;
-            if (type === '지출') {
-                document.getElementById('cal-btn-expense').classList.add('active');
-                document.getElementById('cal-btn-income').classList.remove('active');
-                document.getElementById('cal_amount_input').placeholder = '지출 금액(원)';
-            } else {
-                document.getElementById('cal-btn-income').classList.add('active');
-                document.getElementById('cal-btn-expense').classList.remove('active');
-                document.getElementById('cal_amount_input').placeholder = '수입 금액(원)';
-            }
-        };
-        
-        // 분류 모달 조작 함수 통합
-        window.openCatModal = function() { document.getElementById('cat-dialog').showModal(); window.loadCategories(); };
-        const CAT_COLOR_PALETTE = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
-        window.toggleCatColorPicker = function(id) {
-            const el = document.getElementById(`cat-color-picker-${id}`);
-            if (!el) return;
-            if (el.style.display === 'flex') { el.style.display = 'none'; return; }
-            const cat = window.catDataById ? window.catDataById[id] : null;
-            const current = cat ? cat.color : null;
-            el.innerHTML = CAT_COLOR_PALETTE.map(c => `<button type="button" onclick="window.setCatColor(${id}, '${c}')" style="width:22px;height:22px;border-radius:50%;background:${c};border:${c === current ? '2px solid var(--color-foreground)' : '2px solid transparent'};padding:0;cursor:pointer;"></button>`).join('');
-            el.style.display = 'flex';
-        };
-        window.setCatColor = async function(id, color) {
-            try {
-                const res = await fetch(`/api/category/${id}/set_color`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({color})});
-                if (!res.ok) throw new Error();
-                window.loadCategories();
-            } catch(err) { window.showToast('색상 변경에 실패했습니다.', 'error'); }
-        };
-
-        window.loadCategories = async function() {
-            const res = await fetch('/api/categories');
-            const cats = await res.json();
-            window.catDataById = {}; cats.forEach(c => window.catDataById[c.id] = c);
-            const editableCats = cats.filter(c => c.name !== '미분류');
-
-            const list = document.getElementById('cat-list');
-            list.innerHTML = editableCats.map(c => `
-                <div style="padding: 12px 0; border-bottom: 1px solid var(--color-line);">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display:flex; align-items:center; gap:8px; flex:1;">
-                            <button type="button" onclick="window.toggleCatColorPicker(${c.id})" title="색상 변경" style="width:18px; height:18px; border-radius:50%; background:${window.safeColor(c.color)}; border:none; cursor:pointer; padding:0; flex-shrink:0;"></button>
-                            <input type="text" id="cat-name-${c.id}" value="${window.escapeHtml(c.name)}" maxlength="50" class="input-field" style="display:none; padding:4px 8px; width:120px;">
-                            <span id="cat-span-${c.id}" style="font-size: 14px; font-weight: 500;">${window.escapeHtml(c.name)}</span>
-                        </div>
-                        <div style="display:flex; gap: 4px; align-items:center;">
-                            <button type="button" onclick="window.moveCat(${c.id}, 'up')" style="background:none;border:none;font-size:14px;cursor:pointer;">▲</button>
-                            <button type="button" onclick="window.moveCat(${c.id}, 'down')" style="background:none;border:none;font-size:14px;cursor:pointer;">▼</button>
-                            <button type="button" id="cat-edit-btn-${c.id}" class="chip" onclick="window.enableEdit(${c.id})" style="padding:4px 8px;font-size:12px;">수정</button>
-                            <button type="button" id="cat-save-btn-${c.id}" class="chip" onclick="window.saveCat(${c.id})" style="display:none; background:var(--color-action); color:#fff; padding:4px 8px;font-size:12px;">저장</button>
-                            <button type="button" onclick="window.deleteCat(${c.id})" style="background:none;border:none;color:var(--color-danger);font-size:12px;padding:4px;cursor:pointer;">삭제</button>
-                        </div>
-                    </div>
-                    <div id="cat-color-picker-${c.id}" style="display:none; gap:6px; flex-wrap:wrap; padding-top:10px; padding-left:26px;"></div>
-                </div>
-            `).join('');
-            // 분류 선택은 팝업 레이어(txsuggest.js)로 대체됨. 여기서는 목록만 갱신한다.
-        };
-        window.addCat = async function() {
-            const name = document.getElementById('new_cat_name').value; if (!name) return;
-            try {
-                const res = await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
-                if (!res.ok) { window.showToast(await window.readError(res, '분류 추가에 실패했습니다.'), 'error'); return; }
-                document.getElementById('new_cat_name').value = ''; window.loadCategories();
-            } catch(err) { window.showToast('분류 추가에 실패했습니다.', 'error'); }
-        };
-        window.enableEdit = function(id) { document.getElementById(`cat-span-${id}`).style.display = 'none'; document.getElementById(`cat-name-${id}`).style.display = 'inline-block'; document.getElementById(`cat-edit-btn-${id}`).style.display = 'none'; document.getElementById(`cat-save-btn-${id}`).style.display = 'inline-block'; };
-        window.saveCat = async function(id) {
-            const name = document.getElementById(`cat-name-${id}`).value;
-            try {
-                const res = await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name})});
-                if (!res.ok) { window.showToast(await window.readError(res, '분류 수정에 실패했습니다.'), 'error'); return; }
-                window.loadCategories();
-            } catch(err) { window.showToast('분류 수정에 실패했습니다.', 'error'); }
-        };
-        window.deleteCat = async function(id) {
-            if (!confirm('분류를 삭제하시겠습니까?\n이 분류로 기록된 내역은 삭제되지 않고 \'미분류\'로 옮겨집니다.')) return;
-            try {
-                const res = await fetch(`/api/category/${id}/delete`, { method: 'POST' });
-                if (!res.ok) { window.showToast(await window.readError(res, '분류 삭제에 실패했습니다.'), 'error'); return; }
-                const d = await res.json().catch(() => ({}));
-                if (d.moved) window.showToast(`내역 ${d.moved}건을 '미분류'로 옮겼어요.`, 'success');
-                window.loadCategories();
-                window.allMonthsData = {};
-                const data = await window.fetchMonthData(window.currentY, window.currentM);
-                document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                window.selectDate(window.selectedDate);
-            } catch(err) { window.showToast('분류 삭제에 실패했습니다.', 'error'); }
-        };
-        window.moveCat = async function(id, dir) {
-            try {
-                const res = await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir})});
-                if (!res.ok) throw new Error();
-                window.loadCategories();
-            } catch(err) { window.showToast('분류 순서 변경에 실패했습니다.', 'error'); }
-        };
-
-        window.openAddSheet = function() {
-            document.getElementById('sheet-title').innerText = '새 내역 등록';
-            document.getElementById('cal-tx-form').action = '/transaction';
-            document.getElementById('cal_amount_input').value = '';
-            document.getElementById('cal_title_input').value = '';
-            document.getElementById('cal_memo_input').value = '';
-            if (window.calTxSuggest) window.calTxSuggest.reset();
-            document.getElementById('cal_date_input').value = window.selectedDate;
-            document.getElementById('cal_exclude_analysis').checked = false;
-            document.getElementById('cal_exclude_budget').checked = false;
-            
-            document.getElementById('bottom-sheet-overlay').classList.add('active');
-            document.getElementById('bottom-sheet').classList.add('active');
-        };
-
-        window.openEditSheet = function(id) {
-            const tx = window.txDataStore[id];
-            document.getElementById('sheet-title').innerText = '내역 수정';
-            document.getElementById('cal-tx-form').action = `/transaction/${tx.id}/edit`;
-            
-            window.setCalTxType(tx.tx_type);
-            document.getElementById('cal_amount_input').value = tx.amount.toLocaleString();
-            window.syncTransactorGroup(document.getElementById('cal-transactor-group'), tx.transactor_value || tx.transactor);
-            document.getElementById('cal_title_input').value = tx.title;
-            if (window.calTxSuggest) window.calTxSuggest.setCategoryId(tx.category_id);
-            document.getElementById('cal_date_input').value = tx.date;
-            document.getElementById('cal_time_input').value = tx.time;
-            document.getElementById('cal_time_picker_input').value = tx.time;
-            document.getElementById('cal_memo_input').value = tx.memo || "";
-            document.getElementById('cal_exclude_analysis').checked = tx.exclude_analysis;
-            document.getElementById('cal_exclude_budget').checked = tx.exclude_budget;
-            
-            document.getElementById('bottom-sheet-overlay').classList.add('active');
-            document.getElementById('bottom-sheet').classList.add('active');
-        };
-
-        window.closeBottomSheet = function() {
-            document.getElementById('bottom-sheet-overlay').classList.remove('active');
-            document.getElementById('bottom-sheet').classList.remove('active');
-        };
-
-        document.getElementById('cal-tx-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const btn = e.target.querySelector('button[type="submit"]');
-            if (btn.disabled) return;
-            btn.disabled = true;
-            const fd = new FormData(e.target); fd.append('ajax', '1');
-            try {
-                const res = await fetch(e.target.action, { method: 'POST', body: fd });
-                if (res.ok) {
-                    let resJson = {};
-                    try { resJson = await res.json(); } catch (_) {}
-                    window.closeBottomSheet();
-                    if (resJson.auto_category) {
-                        window.showToast(`과거 내역을 참고해 '${resJson.auto_category}' 분류로 등록했어요`, 'success');
-                    } else {
-                        window.showToast('처리 완료되었습니다.', 'success');
-                    }
-
-                    window.allMonthsData = {};
-                    let data = await window.fetchMonthData(window.currentY, window.currentM);
-                    document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                    window.selectDate(window.selectedDate);
-                } else {
-                    window.showToast(await window.readError(res, '처리에 실패했습니다. 다시 시도해주세요.'), 'error');
-                }
-            } catch(e) {
-                window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');
-            } finally {
-                btn.disabled = false;
-            }
-        });
-
-        window.deleteTx = async function(id) {
-            if(!confirm('정말 삭제하시겠습니까?')) return;
-            try {
-                let fd = new FormData(); fd.append('ajax', '1');
-                let res = await fetch(`/transaction/${id}/delete`, {method:'POST', body: fd});
-                if(res.ok) {
-                    window.showToast('삭제되었습니다.', 'success');
-                    window.allMonthsData = {};
-                    let data = await window.fetchMonthData(window.currentY, window.currentM);
-                    document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
-                    window.selectDate(window.selectedDate);
-                } else {
-                    window.showToast('삭제에 실패했습니다. 다시 시도해주세요.', 'error');
-                }
-            } catch(err) {
-                window.showToast('네트워크 오류로 삭제하지 못했습니다.', 'error');
-            }
-        };
     }
-</script>
-<script>
-    window.calTxSuggest = window.initTxSuggest({
-        amountInput: document.getElementById('cal_amount_input'),
-        titleInput: document.getElementById('cal_title_input'),
-        txTypeInput: document.getElementById('cal_tx_type'),
-        catValueInput: document.getElementById('cal_category_select'),
-        catButton: document.getElementById('cal_category_btn'),
+
+    async function showMonth(y, m, keepDate) {
+        window.currentY = y; window.currentM = m;
+        document.getElementById('cal-month-header').textContent = `${y}년 ${m}월`;
+        window.setStoredMonth(y, m);
+        window.history.replaceState(window.history.state, '', `/calendar?year=${y}&month=${m}`);
+        localStorage.setItem('gb_last_page', `/calendar?year=${y}&month=${m}`);
+        const data = await window.fetchMonthData(y, m);
+        if (!keepDate) window.selectedDate = defaultDateFor(y, m);
+        document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
+        fitHeight();
+        renderMonthSum(data);
+        window.selectDate(window.selectedDate);
+        renderNeighbors();
+    }
+
+    window.allMonthsData[`${window.currentY}-${window.currentM}`] = window.initialData;
+    window.selectedDate = defaultDateFor(window.currentY, window.currentM);
+    document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(window.initialData);
+    fitHeight();
+    renderMonthSum(window.initialData);
+    window.selectDate(window.selectedDate);
+    renderNeighbors();
+
+    window.shiftMonth = function(dir) {
+        const slider = document.getElementById('calendar-slider');
+        slider.style.transition = 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)';
+        slider.style.transform = dir === 1 ? 'translateX(-66.666%)' : 'translateX(0%)';
+        const t = dir === 1 ? window.getNextMonth(window.currentY, window.currentM) : window.getPrevMonth(window.currentY, window.currentM);
+        setTimeout(async () => {
+            slider.style.transition = 'none';
+            slider.style.transform = 'translateX(-33.333%)';
+            await showMonth(t.y, t.m, false);
+        }, 300);
+    };
+    window.onMonthJump = (y, m) => showMonth(y, m, false);
+    window.txSheetDefaultDate = () => window.selectedDate;
+    window.onTxChanged = async () => { window.allMonthsData = {}; await showMonth(window.currentY, window.currentM, true); };
+
+    const view = document.getElementById('calendar-slider-wrapper');
+    let startX = 0, startY = 0, diffX = 0, isSwiping = false, isScrolling = false;
+    view.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        isSwiping = true; isScrolling = false; diffX = 0;
+        document.getElementById('calendar-slider').style.transition = 'none';
+    }, {passive: true});
+    view.addEventListener('touchmove', e => {
+        if (!isSwiping) return;
+        diffX = e.touches[0].clientX - startX;
+        const diffY = e.touches[0].clientY - startY;
+        if (!isScrolling && Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 5) isScrolling = true;
+        if (isScrolling) { isSwiping = false; return; }
+        const percent = (diffX / view.offsetWidth) * 33.333;
+        document.getElementById('calendar-slider').style.transform = `translateX(${-33.333 + percent}%)`;
+    }, {passive: true});
+    view.addEventListener('touchend', () => {
+        if (!isSwiping) return;
+        isSwiping = false;
+        if (diffX < -60) window.shiftMonth(1);
+        else if (diffX > 60) window.shiftMonth(-1);
+        else {
+            const s = document.getElementById('calendar-slider');
+            s.style.transition = 'transform 0.3s ease'; s.style.transform = 'translateX(-33.333%)';
+        }
     });
+}
 </script>
 {% endblock %}

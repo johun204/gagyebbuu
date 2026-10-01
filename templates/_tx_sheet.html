@@ -1,0 +1,305 @@
+{% from '_icons.html' import icon %}
+{#- 모든 탭에서 같이 쓰는 내역 등록/수정 시트 + 분류 관리. base.html 이 가계부가 있는 화면에 자동으로 넣는다.
+    화면에서 쓰는 함수: openTxSheet({tx?, date?}), closeTxSheet(), deleteTx(id), openCatModal()
+    저장/삭제 후에는 화면이 정의한 window.onTxChanged() 를 불러 새로고침하게 한다. -#}
+<style>
+    .amount-wrap { display: flex; align-items: baseline; gap: 6px; border-bottom: 2px solid var(--line); padding: 4px 2px 8px; margin-bottom: 10px; }
+    .amount-wrap:focus-within { border-color: var(--brand); }
+    .amount-wrap input { flex: 1; min-width: 0; border: none; background: transparent; font-size: 32px; font-weight: 800; outline: none; letter-spacing: -0.02em; }
+    .amount-wrap input::placeholder { color: var(--text-3); opacity: .5; }
+    .amount-wrap span { font-size: 22px; font-weight: 700; color: var(--text-2); }
+    .flag-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
+    .flag-row + .flag-row { border-top: 1px solid var(--line); }
+    .flag-row b { font-size: 15px; font-weight: 600; display: block; }
+    .flag-row small { font-size: 12.5px; color: var(--text-3); }
+    .txcat-btn { text-align: left; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+    #tx-sheet details summary { list-style: none; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-2); padding: 6px 0; display: flex; align-items: center; gap: 4px; }
+    #tx-sheet details summary::-webkit-details-marker { display: none; }
+    #tx-sheet details[open] summary .icon { transform: rotate(180deg); }
+</style>
+
+<div class="sheet-overlay" id="tx-sheet-overlay" onclick="window.closeTxSheet()"></div>
+<div class="sheet" id="tx-sheet" role="dialog" aria-modal="true" aria-labelledby="tx-sheet-title">
+    <div class="grabber"></div>
+    <div class="sheet-head">
+        <h3 id="tx-sheet-title">내역 추가</h3>
+        <button type="button" class="icon-btn" onclick="window.closeTxSheet()" aria-label="닫기">{{ icon('x') }}</button>
+    </div>
+
+    <form id="tx-form" class="no-spa" method="POST" action="/transaction" autocomplete="off">
+        <div class="seg" style="margin-bottom: 18px;">
+            <button type="button" id="txf-type-expense" class="active is-expense" onclick="window.txSheetSetType('지출')">지출</button>
+            <button type="button" id="txf-type-income" class="is-income" onclick="window.txSheetSetType('수입')">수입</button>
+            <input type="hidden" name="tx_type" id="txf-type" value="지출">
+        </div>
+
+        <label class="sr-only" for="txf-amount">금액</label>
+        <div class="amount-wrap">
+            <input type="text" inputmode="numeric" id="txf-amount" name="amount" placeholder="0" required oninput="window.formatNumber(this)">
+            <span>원</span>
+        </div>
+        <div class="chips" style="margin-bottom: 18px;">
+            <button type="button" class="chip" onclick="window.txSheetAddAmount(1000)">+1천</button>
+            <button type="button" class="chip" onclick="window.txSheetAddAmount(10000)">+1만</button>
+            <button type="button" class="chip" onclick="window.txSheetAddAmount(50000)">+5만</button>
+            <button type="button" class="chip" onclick="window.txSheetAddAmount(100000)">+10만</button>
+        </div>
+
+        <div class="field">
+            <span class="field-label">누가</span>
+            <div class="chips" id="txf-who">
+                {% for u in g.ledger.users %}
+                <button type="button" class="chip" data-value="{{ u.nickname }}" onclick="window.setTransactor(this)"><span class="dot" data-color="{{ u.color | palette }}"></span>{{ u.nickname }}</button>
+                {% endfor %}
+                <button type="button" class="chip" data-value="함께" onclick="window.setTransactor(this)"><span class="dot" data-color="{{ g.ledger.together_color | palette }}"></span>함께</button>
+                <input type="hidden" name="transactor" value="{{ g.user.nickname }}">
+            </div>
+        </div>
+
+        <div class="field">
+            <label for="txf-title">내용</label>
+            <div><input type="text" id="txf-title" name="title" maxlength="100" class="input-field" placeholder="예: 마트 장보기" required></div>
+        </div>
+
+        <div class="field">
+            <span class="field-label" style="display: flex; justify-content: space-between;">분류 <button type="button" class="more" onclick="window.openCatModal()" style="background:none;border:none;color:var(--brand);font-weight:600;font-size:13px;cursor:pointer;">분류 관리</button></span>
+            <input type="hidden" name="category_id" id="txf-category">
+            <button type="button" id="txf-category-btn" class="input-field txcat-btn">미분류</button>
+        </div>
+
+        <div class="field">
+            <span class="field-label">날짜</span>
+            <div class="row-2">
+                <input type="date" name="date" id="txf-date" class="input-field" required>
+                <input type="time" name="time" id="txf-time" class="input-field" style="flex: 0 0 148px;" aria-label="시간">
+            </div>
+            <div class="chips" style="margin-top: 8px;">
+                <button type="button" class="chip" onclick="window.txSheetSetDay(0)">오늘</button>
+                <button type="button" class="chip" onclick="window.txSheetSetDay(-1)">어제</button>
+            </div>
+        </div>
+
+        <details id="txf-more">
+            <summary>메모 · 집계 제외 설정 {{ icon('chevron-down', 18) }}</summary>
+            <div class="field" style="margin-top: 8px;">
+                <input type="text" id="txf-memo" name="memo" maxlength="255" class="input-field" placeholder="메모 (선택)">
+            </div>
+            <label class="flag-row">
+                <span><b>예산에서 제외</b><small>총수입·총지출과 예산 진행률에서 빠져요</small></span>
+                <span class="switch"><input type="checkbox" id="txf-exclude-budget" name="exclude_budget"><span class="slider"></span></span>
+            </label>
+            <label class="flag-row">
+                <span><b>분석에서 제외</b><small>카테고리·추이 분석에서 빠져요</small></span>
+                <span class="switch"><input type="checkbox" id="txf-exclude-analysis" name="exclude_analysis"><span class="slider"></span></span>
+            </label>
+        </details>
+
+        <div class="row-2" style="margin-top: 18px;">
+            <button type="button" id="txf-delete" class="btn danger" style="flex: 0 0 96px; display: none;" onclick="window.deleteTx(window.txSheetEditingId)">삭제</button>
+            <button type="submit" class="btn" id="txf-submit">저장하기</button>
+        </div>
+    </form>
+</div>
+
+<dialog id="cat-dialog">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+        <h3>분류 관리</h3>
+        <button type="button" class="icon-btn" onclick="document.getElementById('cat-dialog').close()" aria-label="닫기">{{ icon('x') }}</button>
+    </div>
+    <div class="row-2" style="margin-bottom: 8px;">
+        <input type="text" id="new_cat_name" maxlength="50" class="input-field" placeholder="새 분류 이름" onkeydown="if(event.key==='Enter'){event.preventDefault();window.addCat();}">
+        <button type="button" class="btn small" style="flex: 0 0 auto;" onclick="window.addCat()">추가</button>
+    </div>
+    <p class="caption" style="margin-bottom: 6px;">분류를 삭제하면 그 분류의 내역은 '미분류'로 옮겨져요.</p>
+    <div id="cat-list" style="max-height: 50vh; overflow-y: auto;"></div>
+</dialog>
+
+<script>
+{
+    const $ = id => document.getElementById(id);
+    const ME = {{ g.user.nickname | tojson }};
+    const PALETTE = {{ ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'] | tojson }};
+    window.txSheetEditingId = null;
+
+    document.querySelectorAll('#txf-who .dot').forEach(d => d.style.background = window.safeColor(d.dataset.color));
+
+    window.txSheetSuggest = window.initTxSuggest({
+        amountInput: $('txf-amount'), titleInput: $('txf-title'), txTypeInput: $('txf-type'),
+        catValueInput: $('txf-category'), catButton: $('txf-category-btn'),
+    });
+
+    const pad = n => String(n).padStart(2, '0');
+    const ymd = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+
+    window.txSheetSetType = function(type) {
+        $('txf-type').value = type;
+        $('txf-type-expense').classList.toggle('active', type === '지출');
+        $('txf-type-income').classList.toggle('active', type === '수입');
+    };
+    window.txSheetAddAmount = function(n) {
+        const cur = parseInt(($('txf-amount').value || '0').replace(/[^0-9]/g, ''), 10) || 0;
+        $('txf-amount').value = (cur + n).toLocaleString();
+        $('txf-amount').dispatchEvent(new Event('input'));
+    };
+    window.txSheetSetDay = function(offset) {
+        const d = new Date(); d.setDate(d.getDate() + offset);
+        $('txf-date').value = ymd(d);
+    };
+
+    window.openTxSheet = function(opts) {
+        opts = opts || {};
+        const tx = opts.tx;
+        const form = $('tx-form');
+        window.txSheetEditingId = tx ? tx.id : null;
+        $('tx-sheet-title').textContent = tx ? '내역 수정' : '내역 추가';
+        form.action = tx ? `/transaction/${tx.id}/edit` : '/transaction';
+        $('txf-delete').style.display = tx ? '' : 'none';
+
+        const now = new Date();
+        const defDate = opts.date || (typeof window.txSheetDefaultDate === 'function' && window.txSheetDefaultDate()) || ymd(now);
+        window.txSheetSetType(tx ? tx.tx_type : '지출');
+        $('txf-amount').value = tx ? Number(tx.amount).toLocaleString() : '';
+        window.syncTransactorGroup($('txf-who'), tx ? (tx.transactor_value || tx.transactor) : ME);
+        $('txf-title').value = tx ? tx.title : '';
+        $('txf-date').value = tx ? tx.date : defDate;
+        $('txf-time').value = tx ? tx.time : hm(now);
+        $('txf-memo').value = tx ? (tx.memo || '') : '';
+        $('txf-exclude-budget').checked = !!(tx && tx.exclude_budget);
+        $('txf-exclude-analysis').checked = !!(tx && tx.exclude_analysis);
+        $('txf-more').open = !!(tx && (tx.memo || tx.exclude_budget || tx.exclude_analysis));
+        if (tx) window.txSheetSuggest.setCategoryId(tx.category_id, tx.category);
+        else window.txSheetSuggest.reset();
+
+        $('tx-sheet-overlay').classList.add('active');
+        $('tx-sheet').classList.add('active');
+        if (!tx) setTimeout(() => $('txf-amount').focus(), 250);
+    };
+
+    window.closeTxSheet = function() {
+        $('tx-sheet-overlay').classList.remove('active');
+        $('tx-sheet').classList.remove('active');
+        if (window.txSheetSuggest) window.txSheetSuggest.hideTitleAC();
+    };
+    document.addEventListener('keydown', function onEsc(e) {
+        if (!document.getElementById('tx-sheet')) { document.removeEventListener('keydown', onEsc); return; }
+        if (e.key === 'Escape') window.closeTxSheet();
+    });
+
+    const notifyChanged = () => { if (typeof window.onTxChanged === 'function') window.onTxChanged(); };
+
+    $('tx-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = $('txf-submit');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        const isAdd = !window.txSheetEditingId;
+        const fd = new FormData(e.target); fd.append('ajax', '1');
+        try {
+            const res = await fetch(e.target.action, { method: 'POST', body: fd });
+            if (res.ok) {
+                let data = {};
+                try { data = await res.json(); } catch (_) {}
+                window.closeTxSheet();
+                if (isAdd && data.auto_category) window.showToast(`과거 내역을 참고해 '${data.auto_category}' 분류로 등록했어요`, 'success');
+                else window.showToast(isAdd ? '등록했어요' : '수정했어요', 'success');
+                notifyChanged();
+            } else {
+                window.showToast(await window.readError(res, '저장하지 못했어요. 다시 시도해주세요.'), 'error');
+            }
+        } catch (err) {
+            window.showToast('네트워크 오류로 저장하지 못했어요.', 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    window.deleteTx = async function(id) {
+        if (!id || !confirm('이 내역을 삭제할까요?')) return;
+        try {
+            const fd = new FormData(); fd.append('ajax', '1');
+            const res = await fetch(`/transaction/${id}/delete`, { method: 'POST', body: fd });
+            if (res.ok) {
+                window.closeTxSheet();
+                window.showToast('삭제했어요', 'success');
+                notifyChanged();
+            } else {
+                window.showToast('삭제하지 못했어요. 다시 시도해주세요.', 'error');
+            }
+        } catch (err) {
+            window.showToast('네트워크 오류로 삭제하지 못했어요.', 'error');
+        }
+    };
+
+    // ---------------- 분류 관리 ----------------
+    window.openCatModal = function() { $('cat-dialog').showModal(); window.loadCategories(); };
+
+    window.loadCategories = async function() {
+        const res = await fetch('/api/categories');
+        const cats = await res.json();
+        window.catDataById = {}; cats.forEach(c => window.catDataById[c.id] = c);
+        const esc = window.escapeHtml;
+        const list = $('cat-list');
+        if (!list) return;
+        list.innerHTML = cats.filter(c => c.name !== '미분류').map(c => `
+            <div style="padding: 10px 0; border-top: 1px solid var(--line);">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" onclick="window.toggleCatColorPicker(${c.id})" aria-label="색상 변경" style="width:22px;height:22px;border-radius:50%;background:${window.safeColor(c.color)};border:none;cursor:pointer;flex-shrink:0;"></button>
+                    <input type="text" id="cat-name-${c.id}" value="${esc(c.name)}" maxlength="50" class="input-field" style="display:none; padding:8px 10px; flex:1;">
+                    <span id="cat-span-${c.id}" style="font-size: 15px; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${esc(c.name)}</span>
+                    <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.moveCat(${c.id}, 'up')" aria-label="위로">▲</button>
+                    <button type="button" class="icon-btn" style="width:32px;height:32px;" onclick="window.moveCat(${c.id}, 'down')" aria-label="아래로">▼</button>
+                    <button type="button" id="cat-edit-btn-${c.id}" class="icon-btn" style="width:32px;height:32px;" onclick="window.enableEdit(${c.id})" aria-label="이름 수정">${window.ICONS.pencil}</button>
+                    <button type="button" id="cat-save-btn-${c.id}" class="btn small" style="display:none;" onclick="window.saveCat(${c.id})">저장</button>
+                    <button type="button" class="icon-btn" style="width:32px;height:32px;color:var(--critical);" onclick="window.deleteCat(${c.id})" aria-label="삭제">${window.ICONS.trash}</button>
+                </div>
+                <div id="cat-color-picker-${c.id}" style="display:none; gap:8px; flex-wrap:wrap; padding: 10px 0 0 30px;"></div>
+            </div>`).join('');
+        if (typeof window.onCategoriesChanged === 'function') window.onCategoriesChanged(cats);
+    };
+
+    window.toggleCatColorPicker = function(id) {
+        const el = $(`cat-color-picker-${id}`);
+        if (!el) return;
+        if (el.style.display === 'flex') { el.style.display = 'none'; return; }
+        const cat = window.catDataById ? window.catDataById[id] : null;
+        const current = cat ? cat.color : null;
+        el.innerHTML = PALETTE.map(c => `<button type="button" onclick="window.setCatColor(${id}, '${c}')" aria-label="색 ${c}" style="width:28px;height:28px;border-radius:50%;background:${window.safeColor(c)};border:${c === current ? '3px solid var(--text)' : '3px solid transparent'};cursor:pointer;"></button>`).join('');
+        el.style.display = 'flex';
+    };
+    window.setCatColor = async function(id, color) {
+        const res = await fetch(`/api/category/${id}/set_color`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({color}) });
+        if (!res.ok) { window.showToast(await window.readError(res, '색상을 바꾸지 못했어요.'), 'error'); return; }
+        window.loadCategories();
+    };
+    window.addCat = async function() {
+        const n = $('new_cat_name'); if (!n || !n.value.trim()) return;
+        const res = await fetch('/api/category/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: n.value}) });
+        if (!res.ok) { window.showToast(await window.readError(res, '분류를 추가하지 못했어요.'), 'error'); return; }
+        n.value = ''; window.loadCategories();
+    };
+    window.enableEdit = function(id) {
+        $(`cat-span-${id}`).style.display = 'none'; $(`cat-name-${id}`).style.display = 'block';
+        $(`cat-edit-btn-${id}`).style.display = 'none'; $(`cat-save-btn-${id}`).style.display = 'inline-flex';
+        $(`cat-name-${id}`).focus();
+    };
+    window.saveCat = async function(id) {
+        const name = $(`cat-name-${id}`).value;
+        const res = await fetch(`/api/category/${id}/edit`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name}) });
+        if (!res.ok) { window.showToast(await window.readError(res, '분류를 수정하지 못했어요.'), 'error'); return; }
+        window.loadCategories(); notifyChanged();
+    };
+    window.deleteCat = async function(id) {
+        if (!confirm("분류를 삭제할까요?\n이 분류의 내역은 삭제되지 않고 '미분류'로 옮겨져요.")) return;
+        const res = await fetch(`/api/category/${id}/delete`, { method: 'POST' });
+        if (!res.ok) { window.showToast(await window.readError(res, '분류를 삭제하지 못했어요.'), 'error'); return; }
+        const d = await res.json().catch(() => ({}));
+        if (d.moved) window.showToast(`내역 ${d.moved}건을 '미분류'로 옮겼어요.`, 'success');
+        window.loadCategories(); notifyChanged();
+    };
+    window.moveCat = async function(id, dir) {
+        const res = await fetch(`/api/category/${id}/move`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({dir}) });
+        if (res.ok) window.loadCategories();
+    };
+}
+</script>

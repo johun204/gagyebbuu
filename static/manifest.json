@@ -1,10 +1,10 @@
 {
-  "name": "가계쀼",
+  "name": "가계쀼 - 함께 쓰는 가계부",
   "short_name": "가계쀼",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#22B57F",
+  "background_color": "#F4F5F8",
+  "theme_color": "#4F5BD5",
   "icons": [
     {
       "src": "/static/icon-192.png",

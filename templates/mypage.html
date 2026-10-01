@@ -1,130 +1,122 @@
 {% extends "base.html" %}
+{% from '_icons.html' import icon %}
 {% block content %}
-<div style="margin-bottom: var(--spacing-lg);">
-    <a href="/settings" style="text-decoration: none; color: var(--color-muted); font-size: 14px; display: inline-flex; align-items: center; gap: 4px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-        설정으로 돌아가기
-    </a>
+<style>
+    .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+    .swatches button { width: 34px; height: 34px; border-radius: 50%; cursor: pointer; padding: 0; border: 3px solid transparent; }
+    .swatches button.selected { border-color: var(--text); }
+    .copy-row { display: flex; gap: 8px; align-items: center; }
+    .copy-row input { flex: 1; min-width: 0; font-size: 14px; }
+</style>
+
+<div class="appbar">
+    <a href="/settings" class="icon-btn" style="margin-left: -8px;" aria-label="설정으로">{{ icon('chevron-left', 26) }}</a>
+    <h1>내 정보 · 가계부</h1>
 </div>
 
-<h2 style="font-size: 20px; font-weight: 700; margin-bottom: var(--spacing-lg);">마이페이지</h2>
-
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">내 프로필 닉네임</h3>
-    <form action="/update_nickname" method="POST" onsubmit="return confirm('닉네임을 변경하시겠습니까?');">
-        <div class="flex-row" style="margin-bottom: 8px;">
-            <div class="input-wrapper"><input type="text" name="nickname" maxlength="50" class="input-field" value="{{ current_user.nickname }}" required></div>
-            <button type="submit" class="btn-action">변경</button>
+    <div class="section-head"><h2>닉네임</h2></div>
+    <form action="/update_nickname" method="POST">
+        <div class="row-2" style="margin-bottom: 10px;">
+            <input type="text" name="nickname" maxlength="50" class="input-field" value="{{ current_user.nickname }}" required aria-label="닉네임">
+            <button type="submit" class="btn small" style="flex: 0 0 auto;">변경</button>
         </div>
-        <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-secondary); cursor: pointer; padding-left: 4px;">
-            <input type="checkbox" name="update_past" style="width:16px; height:16px;"> 기존 등록된 내역의 이름도 함께 변경하기
+        <label style="display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--text-2); cursor: pointer;">
+            <input type="checkbox" name="update_past" style="width: 18px; height: 18px; accent-color: var(--brand);"> 이미 기록된 내역의 이름도 함께 바꾸기
         </label>
     </form>
 </div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 12px;">참여 중인 사용자</h3>
-    <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div class="section-head"><h2>색상</h2></div>
+    <p class="caption" style="margin-bottom: 10px;">홈·분석·내역에서 사람을 구분하는 색이에요.</p>
+    <div class="field-label">나 ({{ current_user.nickname }})</div>
+    <div class="swatches" id="my-color-swatches" style="margin-bottom: 16px;"></div>
+    <div class="field-label">함께 쓴 내역</div>
+    <div class="swatches" id="together-color-swatches"></div>
+</div>
+
+<div class="card">
+    <div class="section-head"><h2>함께하는 사람</h2></div>
+    <div class="list">
         {% for u in ledger.users %}
-        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px; background: var(--color-line); border-radius: var(--radius-action);">
-            <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="width: 14px; height: 14px; border-radius: 50%; background: {{ u.color or '#9fa4b0' }}; display: inline-block; flex-shrink: 0;"></span>
-                <span style="font-weight: 500; font-size: 14px;">{{ u.nickname }}</span>
-            </div>
-            {% if u.id == current_user_id %}
-            <div class="chip" style="font-size: 12px; padding: 4px 8px;">나</div>
-            {% endif %}
+        <div class="list-row" style="cursor: default;">
+            <span class="avatar" style="background: {{ u.color | palette }};">{{ u.nickname[:1] }}</span>
+            <span class="grow title">{{ u.nickname }}</span>
+            {% if u.id == current_user_id %}<span class="badge" style="background: var(--brand-soft); color: var(--brand);">나</span>{% endif %}
         </div>
         {% endfor %}
     </div>
-</div>
 
-<div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">내 프로필 색상</h3>
-    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">홈 화면 요약/분석과 내역 목록에서 나를 나타내는 색상이에요.</p>
-    <div id="my-color-swatches" style="display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px;"></div>
-
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">'함께' 색상</h3>
-    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">두 사람이 함께 쓴 내역을 나타내는 색상이에요.</p>
-    <div id="together-color-swatches" style="display: flex; flex-wrap: wrap; gap: 10px;"></div>
-</div>
-
-<div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">가계부 이름 변경</h3>
-    <form action="/update_ledger_name" method="POST" class="flex-row" onsubmit="return confirm('가계부 이름을 변경하시겠습니까?');">
-        <div class="input-wrapper"><input type="text" name="name" maxlength="100" class="input-field" value="{{ ledger.name }}" required></div>
-        <button type="submit" class="btn-action">변경</button>
-    </form>
-</div>
-
-<div class="card">
-    {% set is_invite_open = ledger.users|length < 2 %}
-    <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" onclick="window.toggleSlide('invite-wrapper', 'invite-arrow')">
-        <h3 style="font-size: 16px; font-weight: 700; margin: 0;">가계부 초대 {% if not is_invite_open %}<span class="chip" style="font-size: 10px; padding: 2px 6px; background: rgba(23, 148, 95, 0.15); color: var(--color-action); margin-left: 4px;">완료</span>{% endif %}</h3>
-        <span id="invite-arrow" class="arrow-icon {% if is_invite_open %}open{% endif %}" style="font-size: 12px; color: var(--color-muted);">▼</span>
-    </div>
-    <div id="invite-wrapper" class="slide-wrapper {% if is_invite_open %}open{% endif %}">
-        <div class="slide-inner">
-            <div style="border-top: 1px solid var(--color-line); padding-top: 16px;">
-                <p style="font-size: 14px; color: var(--color-secondary); margin-bottom: 12px;">가족이나 연인을 초대해 함께 가계부를 관리하세요.</p>
-
-                <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 링크</label>
-                <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 16px; margin-top: 4px;">
-                    <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-                    <button type="button" class="btn-action" onclick="window.copyLink()" style="padding: 0 16px; height: 48px;">복사</button>
-                </div>
-
-                <label style="font-size: 12px; font-weight: 700; color: var(--color-secondary);">초대 코드 (직접 입력용)</label>
-                <div style="display: flex; gap: 8px; align-items: center; margin-top: 4px;">
-                    <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly style="background: var(--color-line); font-size: 14px; flex: 1;">
-                    <button type="button" class="btn-action" onclick="window.copyCode()" style="padding: 0 16px; height: 48px; background-color: var(--color-secondary);">복사</button>
-                </div>
-
-                <form action="/regenerate_invite" method="POST" style="margin-top: 16px;" onsubmit="return confirm('초대 링크를 새로 만들까요?\n이전에 공유한 링크와 코드는 더 이상 사용할 수 없게 됩니다.');">
-                    <button type="submit" class="chip" style="width: 100%; padding: 10px; color: var(--color-secondary); background: var(--color-line);">초대 링크 새로 만들기</button>
-                </form>
+    {% if ledger.users|length < 2 %}
+    <div class="divider"></div>
+    <div class="section-head" style="margin-bottom: 8px;"><h2 style="font-size: 15px;">배우자·연인 초대하기</h2></div>
+    <p class="caption" style="margin-bottom: 12px;">링크를 보내면 상대방이 카카오로 로그인한 뒤 바로 함께 쓸 수 있어요.</p>
+    {% endif %}
+    <details {% if ledger.users|length < 2 %}open{% endif %}>
+        {% if ledger.users|length >= 2 %}<summary class="caption" style="cursor: pointer; margin-top: 10px;">초대 링크 보기</summary>{% endif %}
+        <div class="field" style="margin-top: 8px;">
+            <label for="invite-link">초대 링크</label>
+            <div class="copy-row">
+                <input type="text" id="invite-link" class="input-field" value="{{ request.host_url }}invite/{{ ledger.invite_hash }}" readonly>
+                <button type="button" class="btn small" style="flex: 0 0 auto;" onclick="window.shareInvite()">{{ icon('link', 18) }} 보내기</button>
             </div>
         </div>
-    </div>
+        <div class="field">
+            <label for="invite-code">초대 코드 (직접 입력용)</label>
+            <div class="copy-row">
+                <input type="text" id="invite-code" class="input-field" value="{{ ledger.invite_hash }}" readonly>
+                <button type="button" class="btn small secondary" style="flex: 0 0 auto;" onclick="window.copyText('invite-code', '초대 코드를 복사했어요.')">{{ icon('copy', 18) }} 복사</button>
+            </div>
+        </div>
+        <form action="/regenerate_invite" method="POST" onsubmit="return confirm('초대 링크를 새로 만들까요?\n이전에 보낸 링크와 코드는 더 이상 쓸 수 없어요.');">
+            <button type="submit" class="chip">{{ icon('refresh', 16) }} 초대 링크 새로 만들기</button>
+        </form>
+    </details>
 </div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px;">데이터 관리</h3>
-    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 16px;">
-        현재 가계부의 모든 내역, 카테고리, 예산 설정을 CSV 파일로 내보내거나 불러올 수 있어요.
-    </p>
-    <button type="button" class="btn-action" onclick="window.downloadCSV()" style="width: 100%; margin-bottom: 16px;">CSV 내보내기</button>
-
-    <form action="/import" method="POST" enctype="multipart/form-data" onsubmit="if(!confirm('CSV 데이터를 불러오시겠습니까?')) { event.preventDefault(); return false; }">
-        <input type="file" name="csv_file" accept=".csv" class="input-field" style="margin-bottom: 12px;" required>
-        <p style="font-size: 12px; color: var(--color-secondary); margin-bottom: 12px;">이미 있는 내역과 날짜·시간·제목·금액·거래자가 모두 같은 줄은 중복으로 보고 건너뜁니다.</p>
-        <button type="submit" class="btn-action" style="width: 100%;">CSV 불러오기</button>
+    <div class="section-head"><h2>가계부 이름</h2></div>
+    <form action="/update_ledger_name" method="POST" class="row-2">
+        <input type="text" name="name" maxlength="100" class="input-field" value="{{ ledger.name }}" required aria-label="가계부 이름">
+        <button type="submit" class="btn small" style="flex: 0 0 auto;">변경</button>
     </form>
 </div>
 
 <div class="card">
-    <h3 style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: var(--color-danger);">가계부 나가기</h3>
-    <p style="font-size: 13px; color: var(--color-secondary); margin-bottom: 12px;">
-        혼자 사용 중인 가계부를 나가면 모든 데이터가 즉시 삭제됩니다. 필요한 경우 먼저 CSV로 데이터를 백업해 주세요.<br>
-        (2명이 함께 사용 중인 경우 남은 사용자는 계속 이용할 수 있습니다.)
+    <div class="section-head"><h2>데이터 백업</h2></div>
+    <p class="caption" style="margin-bottom: 12px;">모든 내역·분류·예산을 CSV 파일로 내보내거나 불러올 수 있어요.</p>
+    <button type="button" class="btn secondary" onclick="window.downloadCSV()" style="margin-bottom: 12px;">{{ icon('download', 18) }} CSV로 내보내기</button>
+    <form action="/import" method="POST" enctype="multipart/form-data" onsubmit="if(!confirm('CSV 파일의 내역을 불러올까요?')) { event.preventDefault(); return false; }">
+        <input type="file" name="csv_file" accept=".csv" class="input-field" style="margin-bottom: 8px; font-size: 14px;" required aria-label="CSV 파일">
+        <p class="caption" style="margin-bottom: 10px;">이미 있는 내역과 날짜·시간·내용·금액·사람이 모두 같은 줄은 중복으로 보고 건너뛰어요.</p>
+        <button type="submit" class="btn secondary">{{ icon('upload', 18) }} CSV 불러오기</button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="section-head"><h2 style="color: var(--critical);">가계부 나가기</h2></div>
+    <p class="caption" style="margin-bottom: 12px;">
+        {% if ledger.users|length <= 1 %}혼자 쓰는 가계부를 나가면 <b>모든 데이터가 즉시 삭제</b>돼요. 먼저 CSV로 백업해 두세요.
+        {% else %}내가 나가도 함께하는 사람은 계속 쓸 수 있고, 초대 링크는 새로 바뀌어요.{% endif %}
     </p>
     <form action="/leave_ledger" method="POST" onsubmit="return window.confirmLeave({{ ledger.users|length }})">
-        <button type="submit" class="btn-action" style="width: 100%; background-color: var(--color-danger);">가계부 나가기</button>
+        <button type="submit" class="btn danger">{{ icon('door', 18) }} 가계부 나가기</button>
     </form>
 </div>
 
 <script>
-    window.__myColor = {{ (current_user.color or '') | tojson }};
-    window.__togetherColor = {{ (ledger.together_color or '') | tojson }};
+    window.__myColor = {{ (current_user.color | palette) | tojson }};
+    window.__togetherColor = {{ (ledger.together_color | palette) | tojson }};
     {
         // 처리 결과 안내 (서버가 ?msg=... 로 돌려보낸 경우). 새로고침 시 다시 뜨지 않도록 주소를 정리한다.
         const MESSAGES = {
             nickname_empty: ['닉네임을 입력해주세요.', 'error'],
-            nickname_taken: ["'함께' 또는 다른 참여자와 같은 닉네임은 사용할 수 없어요.", 'error'],
-            invite_regenerated: ['초대 링크를 새로 만들었어요. 이전 링크는 더 이상 사용할 수 없어요.', 'success'],
+            nickname_taken: ["'함께' 또는 다른 사람과 같은 닉네임은 쓸 수 없어요.", 'error'],
+            invite_regenerated: ['초대 링크를 새로 만들었어요. 이전 링크는 더 이상 쓸 수 없어요.', 'success'],
             import_nofile: ['불러올 CSV 파일을 선택해주세요.', 'error'],
-            import_encoding: ['CSV 파일을 읽을 수 없어요. UTF-8 형식으로 저장된 파일인지 확인해주세요.', 'error'],
-            import_failed: ['CSV를 불러오는 중 오류가 발생해 아무것도 반영하지 않았어요.', 'error'],
+            import_encoding: ['CSV 파일을 읽을 수 없어요. UTF-8 형식인지 확인해주세요.', 'error'],
+            import_failed: ['CSV를 불러오는 중 오류가 나서 아무것도 반영하지 않았어요.', 'error'],
         };
         const msg = {{ msg | tojson }};
         if (msg === 'imported') {
@@ -142,88 +134,65 @@
     }
 </script>
 <script>
-    {
-        const COLOR_PALETTE = ['#22B57F', '#F0A94E', '#3FADD6', '#C876C2', '#EB7A6E', '#F0CB5C', '#8F79D6', '#4FC2D6', '#E0A0D6', '#4FBFA0'];
+{
+    const PALETTE = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
 
-        function renderSwatches(containerId, selected, kind) {
-            const el = document.getElementById(containerId);
-            el.innerHTML = COLOR_PALETTE.map(c => `
-                <button type="button" onclick="window.pickColor('${kind}', '${c}')"
-                    style="width:32px; height:32px; border-radius:50%; background:${c}; cursor:pointer; padding:0;
-                    border: ${c === selected ? '3px solid var(--color-foreground)' : '3px solid transparent'};"></button>
-            `).join('');
-        }
-        renderSwatches('my-color-swatches', window.__myColor, 'mine');
-        renderSwatches('together-color-swatches', window.__togetherColor, 'together');
-
-        window.pickColor = async function(kind, color) {
-            const url = kind === 'mine' ? '/update_color' : '/update_together_color';
-            const fd = new FormData();
-            fd.append('color', color);
-            fd.append('ajax', '1');
-            try {
-                const res = await fetch(url, { method: 'POST', body: fd });
-                if (res.ok) {
-                    if (kind === 'mine') { window.__myColor = color; renderSwatches('my-color-swatches', color, 'mine'); }
-                    else { window.__togetherColor = color; renderSwatches('together-color-swatches', color, 'together'); }
-                    window.showToast('색상이 변경되었습니다.', 'success');
-                } else {
-                    window.showToast('색상 변경에 실패했습니다.', 'error');
-                }
-            } catch(err) {
-                window.showToast('네트워크 오류로 처리하지 못했습니다.', 'error');
-            }
-        };
-
-        window.copyLink = function() {
-            const copyText = document.getElementById("invite-link");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999);
-            document.execCommand("copy");
-            window.showToast("초대 링크가 복사되었습니다.", 'success');
-        };
-
-        window.copyCode = function() {
-            const copyText = document.getElementById("invite-code");
-            copyText.select();
-            copyText.setSelectionRange(0, 99999);
-            document.execCommand("copy");
-            window.showToast("초대 코드가 복사되었습니다.", 'success');
-        };
-
-        window.confirmLeave = function(userCount) {
-            let msg = "정말 이 가계부에서 나가시겠습니까?";
-            if (userCount <= 1) {
-                msg = "현재 이 가계부를 혼자 사용 중입니다.\n나가기를 하시면 가계부의 모든 내역, 분류, 설정 데이터가 영구적으로 삭제됩니다.\n(삭제 전 CSV 데이터 내보내기를 권장합니다.)\n\n정말로 가계부를 삭제하고 나가시겠습니까?";
-            } else {
-                msg = "가계부에서 나가시겠습니까?\n남은 한 명의 사용자는 계속 이용 가능하며, 이후 새로운 사람을 초대할 수 있습니다.";
-            }
-            return confirm(msg);
-        };
-
-        window.downloadCSV = async function() {
-            try {
-                const res = await fetch('/export');
-                if (res.ok) {
-                    const blob = await res.blob();
-                    const url = window.URL.createObjectURL(blob);
-
-                    const a = document.createElement('a');
-                    a.style.display = 'none';
-                    a.href = url;
-                    a.download = 'ledger.csv';
-                    document.body.appendChild(a);
-                    a.click();
-
-                    window.URL.revokeObjectURL(url);
-                    a.remove();
-                } else {
-                    window.showToast('다운로드에 실패했습니다. 다시 시도해주세요.', 'error');
-                }
-            } catch(e) {
-                window.showToast('다운로드 중 네트워크 오류가 발생했습니다.', 'error');
-            }
-        };
+    function renderSwatches(containerId, selected, kind) {
+        document.getElementById(containerId).innerHTML = PALETTE.map(c =>
+            `<button type="button" class="${c === selected ? 'selected' : ''}" aria-label="색 선택" aria-pressed="${c === selected}" onclick="window.pickColor('${kind}', '${c}')" style="background:${window.safeColor(c)}"></button>`).join('');
     }
+    renderSwatches('my-color-swatches', window.__myColor, 'mine');
+    renderSwatches('together-color-swatches', window.__togetherColor, 'together');
+
+    window.pickColor = async function(kind, color) {
+        const fd = new FormData();
+        fd.append('color', color); fd.append('ajax', '1');
+        try {
+            const res = await fetch(kind === 'mine' ? '/update_color' : '/update_together_color', { method: 'POST', body: fd });
+            if (!res.ok) { window.showToast(await window.readError(res, '색상을 바꾸지 못했어요.'), 'error'); return; }
+            if (kind === 'mine') { window.__myColor = color; renderSwatches('my-color-swatches', color, 'mine'); }
+            else { window.__togetherColor = color; renderSwatches('together-color-swatches', color, 'together'); }
+            window.showToast('색상을 바꿨어요.', 'success');
+        } catch (err) {
+            window.showToast('네트워크 오류로 처리하지 못했어요.', 'error');
+        }
+    };
+
+    window.copyText = async function(id, message) {
+        const el = document.getElementById(id);
+        try { await navigator.clipboard.writeText(el.value); }
+        catch (e) { el.select(); el.setSelectionRange(0, 99999); document.execCommand('copy'); }
+        window.showToast(message, 'success');
+    };
+    window.shareInvite = async function() {
+        const url = document.getElementById('invite-link').value;
+        if (navigator.share) {
+            try { await navigator.share({ title: '가계쀼 초대', text: {{ ('[' ~ ledger.name ~ '] 가계부에 초대했어요. 함께 써요!') | tojson }}, url }); return; }
+            catch (e) { if (e && e.name === 'AbortError') return; }
+        }
+        window.copyText('invite-link', '초대 링크를 복사했어요.');
+    };
+
+    window.confirmLeave = function(userCount) {
+        return confirm(userCount <= 1
+            ? "혼자 쓰는 가계부예요.\n나가면 모든 내역·분류·설정이 영구적으로 삭제돼요.\n(먼저 CSV로 백업하는 것을 권장해요)\n\n정말 삭제하고 나갈까요?"
+            : "가계부에서 나갈까요?\n함께하는 사람은 계속 쓸 수 있어요.");
+    };
+
+    window.downloadCSV = async function() {
+        try {
+            const res = await fetch('/export');
+            if (!res.ok) { window.showToast('내보내지 못했어요. 다시 시도해주세요.', 'error'); return; }
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none'; a.href = url; a.download = 'ledger.csv';
+            document.body.appendChild(a); a.click();
+            window.URL.revokeObjectURL(url); a.remove();
+        } catch (e) {
+            window.showToast('네트워크 오류로 내보내지 못했어요.', 'error');
+        }
+    };
+}
 </script>
 {% endblock %}

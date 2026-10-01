@@ -11,7 +11,7 @@ from flask import Flask, request, jsonify, render_template
 
 import config
 from models import db, User, Ledger
-from helpers import wants_json
+from helpers import wants_json, norm_color
 
 app = Flask(__name__)
 app.secret_key = config.SECRET_KEY
@@ -23,6 +23,8 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
 # CSV 불러오기 등 업로드 최대 크기 (서버리스 메모리 보호)
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024
 db.init_app(app)
+# 템플릿에서 저장된 색을 현재 팔레트 색으로 바꿔 쓰기: {{ user.color | palette }}
+app.jinja_env.filters['palette'] = norm_color
 
 with app.app_context():
     db.create_all()

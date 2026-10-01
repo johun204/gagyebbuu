@@ -89,7 +89,7 @@ def test_large_amount_and_long_text_are_stored(make_ledger, client_for):
     assert tx.amount == 3_000_000_000
     assert len(tx.title) == 100 and len(tx.memo) == 255
     data = c.get('/api/home_data?year=2026&month=9').get_json()
-    assert data['budget_expense'] == 3_000_000_000
+    assert data['expense'] == 3_000_000_000
 
 
 def test_title_missing_is_not_500(make_ledger, client_for):
@@ -152,14 +152,14 @@ def test_nickname_change_keeps_color_and_aggregation(make_ledger, client_for):
 
     data = c.get('/api/home_data?year=2026&month=9').get_json()
     # 같은 사람의 지출이 새 닉네임 하나로 합쳐지고 본인 색상을 유지한다
-    assert data['payer_expense'] == {'철수2': 12000}
-    assert data['payer_color_map'] == {'철수2': '#3FADD6'}
+    # 예전 팔레트 색(#3FADD6)은 화면에서 새 팔레트의 대응 색으로 보인다
+    assert [(p['name'], p['amount'], p['color']) for p in data['people']] == [('철수2', 12000, '#2a78d6')]
 
     listed = c.get('/api/transactions').get_json()['transactions']
     old = next(t for t in listed if t['amount'] == 5000)
     assert old['transactor'] == '철수'            # 표시 이름은 기록 당시 그대로
     assert old['transactor_value'] == '철수2'     # 수정 시트에서는 현재 닉네임 버튼이 선택됨
-    assert old['transactor_color'] == '#3FADD6'
+    assert old['transactor_color'] == '#2a78d6'
 
 
 def test_nickname_update_past_only_touches_own_rows(make_ledger, client_for):

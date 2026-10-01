@@ -1,6 +1,6 @@
 """앱 아이콘 생성기.
-풀블리드(모서리까지 꽉 찬) 초록 그라데이션 위에 흰색 돼지저금통 실루엣 +
-하트가 새겨진 동전. 512/192 PNG를 static/ 에 덮어쓴다.
+풀블리드(모서리까지 꽉 찬) 인디고 그라데이션 위에 흰색 돼지저금통 실루엣 +
+코랄 하트가 새겨진 동전. 512/192/180(iOS)/32(파비콘) PNG를 static/ 에 덮어쓴다.
 
     python make_icons.py
 """
@@ -11,8 +11,9 @@ U = 1024                   # 논리 좌표계
 S = U * SS
 WHITE = (255, 255, 255, 255)
 
-TOP = (43, 190, 134)       # --color-primary 계열
-BOT = (18, 137, 90)        # --color-action 계열
+TOP = (110, 122, 240)      # 브랜드(인디고) 밝은 쪽
+BOT = (63, 74, 192)        # 브랜드(인디고) 진한 쪽 (#3F4AC0)
+HEART = (255, 122, 122, 255)  # 동전 속 하트 (코랄)
 
 
 def px(v):
@@ -54,7 +55,7 @@ def build():
     # 부드러운 그림자
     sh = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     ds = ImageDraw.Draw(sh)
-    ellipse(ds, 0.505, 0.60, 0.31, 0.235, (6, 60, 38, 110))
+    ellipse(ds, 0.505, 0.60, 0.31, 0.235, (22, 26, 90, 110))
     sh = sh.filter(ImageFilter.GaussianBlur(px(0.022)))
 
     # 흰색 실루엣
@@ -85,14 +86,13 @@ def build():
     ellipse(dc, 0.845, 0.585, 0.019, 0.029, 255)
     icon.paste(bg, (0, 0), cut)
 
-    # 동전 속 하트
+    # 동전 속 하트 (코랄)
     hl = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-    heart(ImageDraw.Draw(hl), 0.505, 0.215, 0.10, (255, 255, 255, 255))
-    hmask = hl.split()[3]
-    icon.paste(bg, (0, 0), hmask)
+    heart(ImageDraw.Draw(hl), 0.505, 0.215, 0.10, HEART)
+    icon.alpha_composite(hl)
 
     icon = icon.convert("RGB")
-    for size in (512, 192):
+    for size in (512, 192, 180, 32):
         icon.resize((size, size), Image.LANCZOS).save(f"static/icon-{size}.png")
         print(f"static/icon-{size}.png 생성")
 
