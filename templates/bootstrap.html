@@ -57,7 +57,7 @@
 
             // 마지막으로 보고 있던 탭/페이지를 기억해뒀다가, PWA 아이콘 실행 등으로
             // start_url("/")에 진입했을 때는 그 페이지부터 이어서 보여준다.
-            var REMEMBERED_PREFIXES = ['/home', '/calendar', '/transactions', '/settings', '/mypage'];
+            var REMEMBERED_PREFIXES = ['/home', '/calendar', '/transactions', '/analysis', '/settings', '/mypage'];
             function saveLastPage(pathWithSearch) {
                 var path = pathWithSearch.split('?')[0];
                 var ok = path === '/' || REMEMBERED_PREFIXES.some(function(p) { return path === p || path.startsWith(p + '/'); });
