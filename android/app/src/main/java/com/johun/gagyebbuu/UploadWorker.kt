@@ -18,7 +18,7 @@ class UploadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
 
     override suspend fun doWork(): Result {
         val prefs = Prefs(applicationContext)
-        val token = prefs.token ?: return Result.success() // 로그인하면 MainActivity 가 다시 예약한다
+        val token = prefs.token ?: return Result.success() // 계정이 연결되면 SettingsActivity 가 다시 예약한다
         val queue = prefs.queue()
         val done = mutableSetOf<String>()
         val expire = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000

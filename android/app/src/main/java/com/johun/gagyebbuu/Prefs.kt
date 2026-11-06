@@ -8,24 +8,19 @@ import org.json.JSONObject
 class Prefs(context: Context) {
     private val sp = context.applicationContext.getSharedPreferences("gagyebbuu", Context.MODE_PRIVATE)
 
-    /** 웹앱 localStorage 의 jwt_token 을 그대로 옮겨 둔 값 (로그아웃하면 null). */
+    /** 웹앱의 로그인 토큰(jwt_token). 웹의 '알림 자동 감지' 설정 링크로 전달받는다. */
     var token: String?
         get() = sp.getString("token", null)
         set(v) = sp.edit().putString("token", v).apply()
 
+    /** token 이 가리키는 사용자 id (계정이 바뀌는지 확인용, -1 = 모름) */
+    var userId: Long
+        get() = sp.getLong("user_id", -1)
+        set(v) = sp.edit().putLong("user_id", v).apply()
+
     var watchedPackages: Set<String>
         get() = sp.getStringSet("watched", emptySet())!!.toSet()
         set(v) = sp.edit().putStringSet("watched", v).apply()
-
-    /** 상대방 활동 알림(앱 푸시) 켜짐 여부 */
-    var partnerPush: Boolean
-        get() = sp.getBoolean("partner_push", false)
-        set(v) = sp.edit().putBoolean("partner_push", v).apply()
-
-    /** 마지막으로 확인한 알림 id (-1 = 아직 기준점 없음) */
-    var lastLogId: Long
-        get() = sp.getLong("last_log_id", -1)
-        set(v) = sp.edit().putLong("last_log_id", v).apply()
 
     var introShown: Boolean
         get() = sp.getBoolean("intro_shown", false)

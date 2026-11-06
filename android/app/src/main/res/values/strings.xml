@@ -2,4 +2,5 @@
 <resources>
     <string name="app_name">가계쀼</string>
     <string name="settings_title">알림 자동 감지</string>
+    <string name="asset_statements" translatable="false">[{\"include\": \"https://gagyebbuu.vercel.app/.well-known/assetlinks.json\"}]</string>
 </resources>

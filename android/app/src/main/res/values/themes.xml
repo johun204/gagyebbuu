@@ -4,6 +4,10 @@
         <item name="android:windowBackground">@color/app_bg</item>
         <item name="android:colorAccent">@color/brand</item>
     </style>
+    <!-- 크롬이 뜨기 전 잠깐 보이는 시작 화면: 앱 배경색만 -->
+    <style name="Theme.Gagyebbuu.Launcher" parent="Theme.Gagyebbuu">
+        <item name="android:windowNoTitle">true</item>
+    </style>
     <style name="Theme.Gagyebbuu.Settings" parent="android:Theme.DeviceDefault.Light">
         <item name="android:colorAccent">@color/brand</item>
         <item name="android:colorPrimary">@color/brand</item>

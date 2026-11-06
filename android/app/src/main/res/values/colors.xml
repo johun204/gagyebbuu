@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="brand_icon_bg">#5661D7</color>
+    <color name="bar_light">#F4F5F8</color>
+    <color name="bar_dark">#0F1115</color>
 </resources>

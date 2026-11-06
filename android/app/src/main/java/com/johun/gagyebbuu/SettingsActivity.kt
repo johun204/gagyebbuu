@@ -1,6 +1,7 @@
 package com.johun.gagyebbuu
 
 import android.Manifest
+import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -25,12 +26,20 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import kotlin.concurrent.thread
 
-/** 알림 접근 권한 안내 + 어떤 앱의 알림을 읽을지 고르는 화면 (앱 안의 유일한 네이티브 화면). */
+/**
+ * 알림 접근 권한 안내 + 어떤 앱의 알림을 읽을지 고르는 화면 (앱 안의 유일한 네이티브 화면).
+ * 웹앱의 '알림 자동 감지' 메뉴가 gagyebbuu://settings?token=... 로 열면서 로그인 토큰을 넘겨준다.
+ */
 class SettingsActivity : ComponentActivity() {
     private class AppItem(val pkg: String, val label: String, val icon: Drawable, val suggested: Boolean)
 
@@ -42,6 +51,7 @@ class SettingsActivity : ComponentActivity() {
     private val adapter = AppAdapter()
     private var allApps = listOf<AppItem>()
     private var query = ""
+    private val askNotifications = registerForActivityResult(ActivityResultContracts.RequestPermission()) { updateStatus() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +71,64 @@ class SettingsActivity : ComponentActivity() {
             val apps = loadApps()
             runOnUiThread { allApps = apps; refreshList() }
         }
+        if (savedInstanceState == null) receiveToken(intent)
+        if (Build.VERSION.SDK_INT >= 33 && !Notifier.canNotify(this)) askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receiveToken(intent)
+    }
+
+    /**
+     * 웹이 넘겨준 로그인 토큰을 저장한다. 다른 사이트가 남의 토큰을 넘겨 이 기기의 카드 알림을 가로채지 못하도록,
+     * 서버에서 토큰 주인을 확인하고 지금 연결된 계정과 다르면 사용자에게 한 번 더 묻는다.
+     */
+    private fun receiveToken(intent: Intent?) {
+        val token = intent?.data?.takeIf { it.scheme == "gagyebbuu" }?.getQueryParameter("token")
+        if (token.isNullOrBlank() || token == prefs.token) return
+        thread {
+            val me = fetchMe(token)
+            runOnUiThread {
+                if (me == null) {
+                    Toast.makeText(this, "로그인 정보를 확인하지 못했어요. 가계쀼에서 다시 열어주세요.", Toast.LENGTH_LONG).show()
+                    return@runOnUiThread
+                }
+                val userId = me.optLong("user_id", -1)
+                val save = {
+                    prefs.token = token
+                    prefs.userId = userId
+                    UploadWorker.schedule(this)
+                    updateStatus()
+                }
+                if (prefs.token == null || prefs.userId == userId) {
+                    save()
+                } else {
+                    AlertDialog.Builder(this)
+                        .setTitle("계정 연결")
+                        .setMessage("'${me.optString("nickname")}'님 (${me.optString("ledger")}) 계정으로 알림 자동 감지를 연결할까요?\n감지한 내역이 이 계정으로 보내져요.")
+                        .setPositiveButton("연결") { _, _ -> save() }
+                        .setNegativeButton("취소", null)
+                        .show()
+                }
+            }
+        }
+    }
+
+    private fun fetchMe(token: String): JSONObject? = try {
+        val conn = URL("${BuildConfig.BASE_URL}/api/me").openConnection() as HttpURLConnection
+        try {
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 10_000
+            conn.setRequestProperty("Accept", "application/json")
+            conn.setRequestProperty("X-Requested-With", "XMLHttpRequest")
+            conn.setRequestProperty("Authorization", "Bearer $token")
+            if (conn.responseCode == 200) JSONObject(conn.inputStream.bufferedReader().use { it.readText() }) else null
+        } finally {
+            conn.disconnect()
+        }
+    } catch (e: Exception) {
+        null
     }
 
     override fun onResume() {
@@ -130,7 +198,7 @@ class SettingsActivity : ComponentActivity() {
         notifyStatus.setOnClickListener(if (canNotify) null else View.OnClickListener {
             startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
         })
-        loginStatus.text = if (prefs.token != null) "✅ 로그인됨" else "⚠️ 가계쀼 앱에서 로그인하면 감지가 시작돼요."
+        loginStatus.text = if (prefs.token != null) "✅ 가계쀼 계정 연결됨" else "⚠️ 가계쀼 계정이 연결되지 않았어요. 가계쀼 앱의 설정 > 알림 자동 감지에서 이 화면을 열어주세요."
         countText.text = "선택한 앱 ${prefs.watchedPackages.size}개"
     }
 
