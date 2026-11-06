@@ -81,7 +81,8 @@
     const draftOf = d => ({
         detected_id: d.id, tx_type: d.tx_type, amount: d.amount, title: d.title, date: d.date, time: d.time,
         category_id: d.category_id, category: d.category,
-        note: `${d.source_label || '알림'}에서 감지한 내역이에요. 확인 후 등록하세요.`,
+        note: d.amount > 0 ? `${d.source_label || '알림'}에서 감지한 내역이에요. 확인 후 등록하세요.`
+                           : `${d.source_label || '알림'}에서 감지한 해외 결제예요. 원화 금액을 입력해 등록하세요.`,
     });
 
     function renderDetected() {
@@ -100,11 +101,11 @@
         $('det-list').innerHTML = items.map(d => {
             const sign = d.tx_type === '수입' ? '+' : '-';
             return `<div class="det-row">
-                <input type="checkbox" aria-label="선택" ${selected.has(d.id) ? 'checked' : ''} onchange="window.detToggle(${d.id}, this.checked)">
+                <input type="checkbox" aria-label="선택" ${selected.has(d.id) ? 'checked' : ''} ${d.amount > 0 ? '' : 'disabled title="금액을 입력해야 등록할 수 있어요"'} onchange="window.detToggle(${d.id}, this.checked)">
                 <div class="grow">
                     <div style="display: flex; gap: 8px; align-items: baseline;">
                         <div class="title" style="flex: 1;">${esc(d.title || '(내용 없음)')}</div>
-                        <div class="amount ${d.tx_type === '수입' ? 'income-text' : ''}">${sign}${won(d.amount)}</div>
+                        <div class="amount ${d.tx_type === '수입' ? 'income-text' : ''}">${d.amount > 0 ? sign + won(d.amount) : '<span class="expense-text" style="font-size:13px">금액 입력 필요</span>'}</div>
                     </div>
                     <div class="meta">${esc(d.date.slice(5).replace('-', '.'))} ${esc(d.time)} · ${esc(d.source_label || '알림')}${d.category ? ` · ${esc(d.category)}` : ''} · <span style="color: ${d.days_left <= 1 ? 'var(--critical)' : 'inherit'}">${d.days_left <= 0 ? '오늘 삭제' : d.days_left + '일 후 삭제'}</span></div>
                     <details><summary>알림 원문</summary><pre>${esc(d.raw_text)}</pre></details>
@@ -116,7 +117,7 @@
             </div>`;
         }).join('');
         $('det-bar').style.display = '';
-        $('det-all').checked = selected.size === items.length;
+        $('det-all').checked = selected.size > 0 && selected.size === items.filter(d => d.amount > 0).length;
         $('det-register-btn').textContent = selected.size ? `선택한 ${selected.size}건 등록` : '등록할 내역을 선택하세요';
         $('det-register-btn').disabled = !selected.size;
     }
@@ -143,7 +144,7 @@
     }
 
     window.detToggle = function(id, on) { on ? selected.add(id) : selected.delete(id); renderDetected(); };
-    window.detSelectAll = function(on) { selected.clear(); if (on) window.ntDetected.forEach(d => selected.add(d.id)); renderDetected(); };
+    window.detSelectAll = function(on) { selected.clear(); if (on) window.ntDetected.forEach(d => { if (d.amount > 0) selected.add(d.id); }); renderDetected(); };
     window.detEdit = function(id) {
         const d = window.ntDetected.find(x => x.id === id);
         if (d) window.openTxSheet({ draft: draftOf(d) });

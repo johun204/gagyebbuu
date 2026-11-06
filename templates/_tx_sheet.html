@@ -167,7 +167,7 @@
         const defDate = opts.date || (typeof window.txSheetDefaultDate === 'function' && window.txSheetDefaultDate()) || ymd(now);
         const src = tx || draft;
         window.txSheetSetType(src ? src.tx_type : '지출');
-        $('txf-amount').value = src ? Number(src.amount).toLocaleString() : '';
+        $('txf-amount').value = src && Number(src.amount) > 0 ? Number(src.amount).toLocaleString() : '';
         window.syncTransactorGroup($('txf-who'), tx ? (tx.transactor_value || tx.transactor) : ME);
         $('txf-title').value = src ? (src.title || '') : '';
         $('txf-date').value = src ? src.date : defDate;

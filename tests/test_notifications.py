@@ -114,3 +114,29 @@ def test_partner_actions_logged_and_read_all(make_ledger, client_for):
     y.post('/api/notifications/read_all')
     assert PushLog.query.filter_by(user_id=younghee.id, is_read=False).count() == 0
     assert 'data-unread="0"' in y.get('/home').get_data(as_text=True)
+
+
+def test_foreign_detection_requires_amount(make_ledger, client_for):
+    _, (chulsoo, _), _ = make_ledger()
+    c = client_for(chulsoo)
+    data = detect(c, text='[Web발신]\n신한카드(1*2*)해외승인 홍*동 USD 12.99 11/06 03:12 NETFLIX.COM').get_json()
+    assert data['notify']['title'] == '해외 결제를 감지했어요'
+    d = db.session.get(DetectedTx, data['id'])
+    assert d.amount == 0 and d.title == 'NETFLIX.COM (USD 12.99)'
+    # 다른 해외 결제는 금액(0)이 같아도 별개로 저장
+    assert 'duplicate' not in detect(c, text='[Web발신]\n신한카드 해외승인 홍*동 USD 5.00 11/06 03:20 STEAM').get_json()
+    # 일괄 등록에서는 제외된다
+    assert c.post('/api/detected/register', json={'ids': [data['id']]}).status_code == 404
+    assert Transaction.query.count() == 0
+
+
+def test_poll_for_app_notifications(make_ledger, client_for):
+    _, (chulsoo, younghee), _ = make_ledger()
+    y = client_for(younghee)
+    first = y.get('/api/notifications/poll').get_json()
+    assert first['items'] == []
+    client_for(chulsoo).post('/transaction', data={'tx_type': '지출', 'amount': '3,000', 'title': '커피',
+                                                  'date': '2026-11-06', 'ajax': '1'})
+    res = y.get(f"/api/notifications/poll?after={first['last_id']}").get_json()
+    assert len(res['items']) == 1 and '커피' in res['items'][0]['body']
+    assert y.get(f"/api/notifications/poll?after={res['last_id']}").get_json()['items'] == []

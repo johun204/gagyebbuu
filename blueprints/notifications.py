@@ -88,6 +88,23 @@ def read_all():
     return jsonify({'success': True})
 
 
+@notifications_bp.route('/api/notifications/poll')
+@require_ledger
+def poll():
+    """안드로이드 앱이 주기적으로 불러 새 알림(상대방의 등록/수정/삭제)을 기기 알림으로 띄운다.
+    앱(WebView)은 웹 푸시를 받을 수 없어서 쓰는 방식. after 보다 큰 id 의 안 읽은 알림을 돌려준다."""
+    user_id = g.user.id
+    last = db.session.query(db.func.max(PushLog.id)).filter(PushLog.user_id == user_id).scalar() or 0
+    after = parse_int(request.args.get('after'))
+    if after is None or after < 0:  # 처음 켰을 때는 지난 알림을 한꺼번에 띄우지 않고 기준점만 잡는다
+        return jsonify({'items': [], 'last_id': last})
+    since = datetime.now() - timedelta(days=1)
+    logs = PushLog.query.filter(PushLog.user_id == user_id, PushLog.id > after, PushLog.is_read.is_(False),
+                                PushLog.created_at >= since).order_by(PushLog.id.asc()).limit(20).all()
+    return jsonify({'items': [{'id': l.id, 'title': l.title, 'body': l.body, 'url': l.url} for l in logs],
+                    'last_id': last})
+
+
 @notifications_bp.route('/api/detected')
 @require_ledger
 def api_detected():
@@ -118,10 +135,11 @@ def api_detect():
 
     raw = '\n'.join(s for s in (title, text) if s)[:MAX_RAW_LEN]
     purge_old(user.id)
-    dup = _valid_detected(user.id).filter(
-        db.or_(DetectedTx.raw_text == raw,
-               db.and_(DetectedTx.amount == parsed['amount'], DetectedTx.tx_type == parsed['tx_type'],
-                       DetectedTx.created_at >= now - _DUP_WINDOW))).first()
+    same = DetectedTx.raw_text == raw
+    if parsed['amount'] > 0:  # 해외 결제(금액 0)는 원문이 같을 때만 같은 건으로 본다
+        same = db.or_(same, db.and_(DetectedTx.amount == parsed['amount'], DetectedTx.tx_type == parsed['tx_type'],
+                                    DetectedTx.created_at >= now - _DUP_WINDOW))
+    dup = _valid_detected(user.id).filter(same).first()
     if dup:
         db.session.commit()
         return jsonify({'success': True, 'duplicate': True, 'id': dup.id})
@@ -133,8 +151,12 @@ def api_detect():
     db.session.add(d)
     db.session.flush()
     verb = '지출' if d.tx_type == '지출' else '입금'
-    notice_title = f"{d.amount:,}원 {verb}을 감지했어요"
-    notice_body = f"{d.title or d.source_label or '내용 없음'} · 눌러서 바로 등록하기 ({DETECTED_KEEP_DAYS}일간 보관)"
+    if d.amount > 0:
+        notice_title = f"{d.amount:,}원 {verb}을 감지했어요"
+        notice_body = f"{d.title or d.source_label or '내용 없음'} · 눌러서 바로 등록하기 ({DETECTED_KEEP_DAYS}일간 보관)"
+    else:
+        notice_title = "해외 결제를 감지했어요"
+        notice_body = f"{d.title} · 원화 금액을 입력해 등록해주세요 ({DETECTED_KEEP_DAYS}일간 보관)"
     url = f'/notifications?detected={d.id}'
     # 기기에서 바로 알림이 뜨고 대기 건수는 '감지된 내역'으로 따로 세므로 목록에는 읽은 상태로 남긴다
     db.session.add(PushLog(user_id=user.id, title=notice_title, body=notice_body[:255], url=url, is_read=True))
@@ -159,7 +181,7 @@ def api_detected_register():
     if not isinstance(ids, list) or not ids or len(ids) > _MAX_BULK:
         return json_error('등록할 내역을 골라주세요.')
     ids = [i for i in (parse_int(x) for x in ids) if i is not None]
-    items = _valid_detected(user.id).filter(DetectedTx.id.in_(ids)).all()
+    items = _valid_detected(user.id).filter(DetectedTx.id.in_(ids), DetectedTx.amount > 0).all()
     if not items:
         return json_error('이미 처리됐거나 기간이 지난 내역이에요.', 404)
 
