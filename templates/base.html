@@ -77,6 +77,28 @@
             return n.toLocaleString();
         };
         window.cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+        // 안드로이드 앱 안에서 열렸는지와 앱 기능.
+        //  - v1.0~1.1 (WebView): window.GagyebbuuAndroid 브리지
+        //  - v1.2+ (크롬 TWA): 시작 주소의 gb_app=버전. 앱 설정은 intent:// 링크로 열고 로그인 토큰을 넘긴다.
+        window.gbApp = (function() {
+            try {
+                const v = new URLSearchParams(location.search).get('gb_app');
+                if (v) { sessionStorage.setItem('gb_app', v); localStorage.setItem('gb_app_version', v); }
+            } catch (e) {}
+            const b = window.GagyebbuuAndroid;
+            if (b && b.appVersion) return { kind: 'webview', version: b.appVersion(), openSettings: () => b.openSettings() };
+            const standalone = window.matchMedia && window.matchMedia('(display-mode: standalone)').matches;
+            const v = sessionStorage.getItem('gb_app') || (standalone && /Android/i.test(navigator.userAgent) && localStorage.getItem('gb_app_version'));
+            if (!v) return null;
+            return {
+                kind: 'twa', version: v,
+                openSettings: () => {
+                    const t = encodeURIComponent(localStorage.getItem('jwt_token') || '');
+                    window.location.href = `intent://settings?token=${t}#Intent;scheme=gagyebbuu;package=com.johun.gagyebbuu;end`;
+                },
+            };
+        })();
         window.ICONS = {{ {'alert': icon('alert', 18), 'check': icon('check', 18), 'info': icon('info', 18), 'trend': icon('trend', 18), 'chevron-right': icon('chevron-right', 18), 'pencil': icon('pencil', 16), 'trash': icon('trash', 16)} | tojson }};
 
         const originalFetch = window.fetch;
@@ -603,16 +625,15 @@
         const verNum = v => (v || '').split('.').map(n => parseInt(n, 10) || 0);
         const isNewer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
         window.getAppUpdateInfo = function() {
-            const b = window.GagyebbuuAndroid;
-            if (!b || !b.appVersion) return null;
+            const app = window.gbApp;
+            if (!app) return null;
             let latest = null;
             try { latest = JSON.parse(localStorage.getItem('gb_app_latest') || 'null'); } catch (e) {}
             if (!latest) return null;
-            return Object.assign({}, latest, { current: b.appVersion(), newer: isNewer(latest.version, b.appVersion()) });
+            return Object.assign({}, latest, { current: app.version, newer: isNewer(latest.version, app.version) });
         };
         window.checkAppUpdate = async function(force) {
-            const b = window.GagyebbuuAndroid;
-            if (!b || !b.appVersion) return;
+            if (!window.gbApp) return;
             let latest = null;
             try { latest = JSON.parse(localStorage.getItem('gb_app_latest') || 'null'); } catch (e) {}
             if (force || !latest || Date.now() - latest.checkedAt > 6 * 3600 * 1000) {
@@ -660,7 +681,24 @@
             };
             if (!dlg.open) dlg.showModal();
         };
-        if (window.GagyebbuuAndroid) setTimeout(() => window.checkAppUpdate(false), 1500);
+        if (window.gbApp) setTimeout(() => window.checkAppUpdate(false), 1500);
+
+        // 크롬 TWA 앱을 처음 열면 알림 자동 감지 설정을 한 번 권한다 (앱 설정을 여는 건 사용자가 눌러야 가능)
+        if (window.gbApp && window.gbApp.kind === 'twa' && localStorage.getItem('jwt_token') && !localStorage.getItem('gb_app_intro_shown')
+                && document.getElementById('gb-badge')) {
+            localStorage.setItem('gb_app_intro_shown', '1');
+            setTimeout(() => {
+                const dlg = document.createElement('dialog');
+                dlg.innerHTML = `<h3 style="margin-bottom: 8px;">문자·카드 알림으로 자동 기록</h3>
+                    <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.5;">문자나 카드앱 알림에서 지출·입금을 찾아 바로 등록할 수 있게 도와드려요. 어떤 앱의 알림을 읽을지 지금 고를까요?<br><small>나중에 설정 &gt; 알림 자동 감지에서도 할 수 있어요.</small></p>
+                    <button type="button" class="btn" style="margin-bottom: 8px;" id="gb-intro-go">설정하기</button>
+                    <button type="button" class="btn secondary" id="gb-intro-later">나중에</button>`;
+                document.body.appendChild(dlg);
+                dlg.querySelector('#gb-intro-go').onclick = () => { dlg.close(); window.gbApp.openSettings(); };
+                dlg.querySelector('#gb-intro-later').onclick = () => dlg.close();
+                dlg.showModal();
+            }, 2500);
+        }
 
         window.toggleSlide = function(wrapperId, arrowId) {
             const wrapper = document.getElementById(wrapperId);

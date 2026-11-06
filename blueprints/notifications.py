@@ -88,6 +88,13 @@ def read_all():
     return jsonify({'success': True})
 
 
+@notifications_bp.route('/api/me')
+@require_ledger
+def me():
+    """안드로이드 앱이 받은 로그인 토큰이 누구의 것인지 확인할 때 쓴다 (계정 연결 확인 화면)."""
+    return jsonify({'user_id': g.user.id, 'nickname': g.user.nickname, 'ledger': g.ledger.name})
+
+
 @notifications_bp.route('/api/notifications/poll')
 @require_ledger
 def poll():

@@ -42,7 +42,7 @@
             <b>감지된 내역은 {{ detected_keep_days }}일 동안만 보관</b>되고, 그 뒤에는 자동으로 삭제돼요.</div>
     </div>
     <div id="app-settings-card" class="card tight" style="display: none;">
-        <button type="button" class="menu-row" style="padding: 4px 0;" onclick="window.GagyebbuuAndroid.openSettings()">
+        <button type="button" class="menu-row" style="padding: 4px 0;" onclick="window.gbApp.openSettings()">
             <span class="icon-wrap">{{ icon('sliders', 20) }}</span><span class="grow">알림 감지 설정<br><small class="caption">어떤 앱(문자, 카드앱 등)의 알림을 읽을지 고르기</small></span><span class="muted">{{ icon('chevron-right', 20) }}</span>
         </button>
     </div>
@@ -91,7 +91,7 @@
         cnt.textContent = items.length; cnt.style.display = items.length ? '' : 'none';
         [...selected].forEach(id => { if (!items.some(d => d.id === id)) selected.delete(id); });
         if (!items.length) {
-            const inApp = !!window.GagyebbuuAndroid;
+            const inApp = !!window.gbApp;
             const isAndroid = /Android/i.test(navigator.userAgent);
             $('det-list').innerHTML = `<div class="empty">감지된 내역이 없어요${!inApp && isAndroid
                 ? `<br><br><a class="btn small secondary no-spa" href="https://github.com/johun204/gagyebbuu/releases/latest" target="_blank" rel="noopener">안드로이드 앱 받기</a><br><small>앱을 설치하면 문자·카드앱 알림으로 지출을 자동으로 찾아드려요.</small>` : ''}</div>`;
@@ -176,7 +176,7 @@
     window.onDetectedRegistered = id => { window.ntDetected = window.ntDetected.filter(d => String(d.id) !== String(id)); renderDetected(); };
     window.onTxChanged = reloadDetected;
 
-    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.openSettings) $('app-settings-card').style.display = '';
+    if (window.gbApp) $('app-settings-card').style.display = '';
 
     renderDetected();
     renderLogs();

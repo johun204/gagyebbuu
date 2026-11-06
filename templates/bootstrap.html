@@ -59,6 +59,11 @@
          죽어버린다 (실제로 겪은 버그). IIFE로 감싸고 var만 써서 격리한다. -->
     <script>
         (function() {
+            // 안드로이드 앱(v1.2+, 크롬 TWA)은 시작 주소에 gb_app=앱버전 을 붙여 연다
+            try {
+                var appVer = new URLSearchParams(window.location.search).get('gb_app');
+                if (appVer) { sessionStorage.setItem('gb_app', appVer); localStorage.setItem('gb_app_version', appVer); }
+            } catch (e) {}
             var token = localStorage.getItem('jwt_token');
 
             if (window.location.pathname.startsWith('/invite/')) {

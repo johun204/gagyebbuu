@@ -56,7 +56,7 @@
         <span class="grow">앱 버전 <span id="android-version"></span><br><small class="caption" id="android-version-caption">눌러서 새 버전 확인</small></span>
         <span class="muted">{{ icon('chevron-right', 20) }}</span>
     </button>
-    <button type="button" class="menu-row" id="android-detect-row" style="display: none;" onclick="window.GagyebbuuAndroid.openSettings()">
+    <button type="button" class="menu-row" id="android-detect-row" style="display: none;" onclick="window.gbApp.openSettings()">
         <span class="icon-wrap">{{ icon('sliders', 20) }}</span>
         <span class="grow">알림 자동 감지<br><small class="caption">문자·카드앱 알림에서 입출금을 찾아 등록을 도와드려요</small></span>
         <span class="muted">{{ icon('chevron-right', 20) }}</span>
@@ -81,10 +81,10 @@
 
 <script>
 {
-    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.openSettings) document.getElementById('android-detect-row').style.display = '';
-    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.appVersion) {
+    if (window.gbApp) {
+        document.getElementById('android-detect-row').style.display = '';
         document.getElementById('android-version-row').style.display = '';
-        document.getElementById('android-version').textContent = window.GagyebbuuAndroid.appVersion();
+        document.getElementById('android-version').textContent = window.gbApp.version;
         const info = window.getAppUpdateInfo && window.getAppUpdateInfo();
         if (info) document.getElementById('android-version-caption').textContent = info.newer ? `새 버전 ${info.version}이 있어요 · 눌러서 업데이트` : '최신 버전이에요';
     }
@@ -131,8 +131,9 @@
         const reg = await navigator.serviceWorker.ready;
         return reg.pushManager.getSubscription();
     };
-    // 안드로이드 앱(WebView)에는 웹 푸시(PushManager)가 없어서 앱이 직접 새 알림을 확인해 띄운다.
-    const bridge = window.GagyebbuuAndroid;
+    // 안드로이드 앱 v1.0~1.1(WebView)에는 웹 푸시(PushManager)가 없어서 v1.1은 앱이 직접 새 알림을 확인해 띄운다.
+    // v1.2+(크롬 TWA)는 크롬 그대로라 아래의 일반 웹 푸시를 쓴다.
+    const bridge = window.gbApp && window.gbApp.kind === 'webview' ? window.GagyebbuuAndroid : null;
     const appPush = !!(bridge && typeof bridge.setPushEnabled === 'function');
     const setCaption = t => { const c = document.getElementById('push-caption'); if (c) c.textContent = t; };
     const refreshPushToggle = async () => {
@@ -141,7 +142,7 @@
         if (appPush) {
             input.disabled = false;
             input.checked = bridge.getPushEnabled();
-            setCaption('상대방이 내역을 등록·수정·삭제하면 알려드려요 (앱이 약 15분마다 확인)');
+            setCaption('상대방이 내역을 등록·수정·삭제하면 알려드려요 (앱이 약 15분마다 확인 · 최신 버전은 바로 알림)');
             return;
         }
         if (bridge) {

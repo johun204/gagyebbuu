@@ -140,3 +140,12 @@ def test_poll_for_app_notifications(make_ledger, client_for):
     res = y.get(f"/api/notifications/poll?after={first['last_id']}").get_json()
     assert len(res['items']) == 1 and '커피' in res['items'][0]['body']
     assert y.get(f"/api/notifications/poll?after={res['last_id']}").get_json()['items'] == []
+
+
+def test_asset_links_public_and_me(app, make_ledger, client_for):
+    res = app.test_client().get('/.well-known/assetlinks.json')
+    assert res.status_code == 200
+    target = res.get_json()[0]['target']
+    assert target['package_name'] == 'com.johun.gagyebbuu' and len(target['sha256_cert_fingerprints'][0]) == 95
+    _, (chulsoo, _), _ = make_ledger()
+    assert client_for(chulsoo).get('/api/me').get_json() == {'user_id': chulsoo.id, 'nickname': '철수', 'ledger': '우리집'}

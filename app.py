@@ -50,6 +50,21 @@ def serve_sw():
     return app.send_static_file('sw.js')
 
 
+# 안드로이드 앱(TWA)이 이 사이트의 주인임을 크롬에 증명하는 파일. 확인되면 앱이 주소창 없이 열리고
+# 웹 푸시 알림이 앱 이름/아이콘으로 표시된다. 지문은 앱 릴리스 서명 키(gagyebbuu-release.jks)의 SHA-256.
+ANDROID_PACKAGE = 'com.johun.gagyebbuu'
+ANDROID_CERT_SHA256 = '8F:E9:90:CF:F2:4F:E2:73:3A:88:5D:76:D7:A6:EF:2D:D0:29:60:07:9F:B8:A1:E0:51:35:7B:CB:19:0A:B5:BA'
+
+
+@app.route('/.well-known/assetlinks.json')
+def asset_links():
+    return jsonify([{
+        'relation': ['delegate_permission/common.handle_all_urls'],
+        'target': {'namespace': 'android_app', 'package_name': ANDROID_PACKAGE,
+                   'sha256_cert_fingerprints': [ANDROID_CERT_SHA256]},
+    }])
+
+
 @app.context_processor
 def inject_user():
     user_id = getattr(request, 'user_id', None)
@@ -77,7 +92,7 @@ def set_security_headers(response):
 
 @app.before_request
 def require_login():
-    public_endpoints = ['auth.login', 'auth.kakao_callback', 'static', 'serve_sw', 'auth.logout']
+    public_endpoints = ['auth.login', 'auth.kakao_callback', 'static', 'serve_sw', 'auth.logout', 'asset_links']
     if request.endpoint in public_endpoints:
         return
 
