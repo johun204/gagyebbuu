@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Gagyebbuu" parent="android:Theme.DeviceDefault.Light.NoActionBar">
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:colorAccent">@color/brand</item>
+    </style>
+    <style name="Theme.Gagyebbuu.Settings" parent="android:Theme.DeviceDefault.Light">
+        <item name="android:colorAccent">@color/brand</item>
+        <item name="android:colorPrimary">@color/brand</item>
+    </style>
+    <color name="brand">#4F5BD5</color>
+    <color name="app_bg">#F4F5F8</color>
+</resources>
