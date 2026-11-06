@@ -170,6 +170,7 @@ class MainActivity : ComponentActivity() {
             val token = try { JSONTokener(raw).nextValue() as? String } catch (e: Exception) { null }
             val changed = token != prefs.token
             prefs.token = token
+            if (changed) prefs.lastLogId = -1 // 다른 계정이면 그 사람의 알림 기준점부터 다시
             if (token != null && (changed || prefs.queue().length() > 0)) UploadWorker.schedule(this)
         }
     }
@@ -191,6 +192,26 @@ class MainActivity : ComponentActivity() {
 
         @JavascriptInterface
         fun appVersion(): String = BuildConfig.VERSION_NAME
+
+        /** 상대방 활동 알림 켜기/끄기 (웹 푸시 대신 앱이 주기적으로 확인). 알림 권한이 없으면 요청하고 "need_permission". */
+        @JavascriptInterface
+        fun setPushEnabled(on: Boolean): String {
+            prefs.partnerPush = on
+            if (on) {
+                prefs.lastLogId = -1 // 켤 때는 지난 알림을 한꺼번에 띄우지 않도록 기준점부터 다시 잡는다
+                PollWorker.schedule(this@MainActivity)
+            } else {
+                PollWorker.cancel(this@MainActivity)
+            }
+            if (on && !Notifier.canNotify(this@MainActivity)) {
+                if (Build.VERSION.SDK_INT >= 33) runOnUiThread { askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                return "need_permission"
+            }
+            return "ok"
+        }
+
+        @JavascriptInterface
+        fun getPushEnabled(): Boolean = prefs.partnerPush
 
         /** blob 다운로드 대신: 텍스트 파일을 다운로드 폴더에 저장한다. */
         @JavascriptInterface

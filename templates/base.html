@@ -80,6 +80,7 @@
         window.ICONS = {{ {'alert': icon('alert', 18), 'check': icon('check', 18), 'info': icon('info', 18), 'trend': icon('trend', 18), 'chevron-right': icon('chevron-right', 18), 'pencil': icon('pencil', 16), 'trash': icon('trash', 16)} | tojson }};
 
         const originalFetch = window.fetch;
+        window.rawFetch = originalFetch; // 외부 주소용 (로그인 토큰을 붙이지 않는다)
         window.fetch = async function(...args) {
             let [resource, config] = args;
             config = config || {};
@@ -596,6 +597,70 @@
             if (settings) bar.insertBefore(a, settings);
             else bar.appendChild(a);
         };
+
+        // 안드로이드 앱이면 GitHub 릴리스(android-vX.Y.Z)에서 최신 버전을 확인해 업데이트를 안내한다 (6시간마다)
+        const APP_RELEASES = 'https://api.github.com/repos/johun204/gagyebbuu/releases?per_page=20';
+        const verNum = v => (v || '').split('.').map(n => parseInt(n, 10) || 0);
+        const isNewer = (a, b) => { const x = verNum(a), y = verNum(b); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+        window.getAppUpdateInfo = function() {
+            const b = window.GagyebbuuAndroid;
+            if (!b || !b.appVersion) return null;
+            let latest = null;
+            try { latest = JSON.parse(localStorage.getItem('gb_app_latest') || 'null'); } catch (e) {}
+            if (!latest) return null;
+            return Object.assign({}, latest, { current: b.appVersion(), newer: isNewer(latest.version, b.appVersion()) });
+        };
+        window.checkAppUpdate = async function(force) {
+            const b = window.GagyebbuuAndroid;
+            if (!b || !b.appVersion) return;
+            let latest = null;
+            try { latest = JSON.parse(localStorage.getItem('gb_app_latest') || 'null'); } catch (e) {}
+            if (force || !latest || Date.now() - latest.checkedAt > 6 * 3600 * 1000) {
+                try {
+                    const res = await window.rawFetch(APP_RELEASES, { headers: { 'Accept': 'application/vnd.github+json' } });
+                    if (!res.ok) throw new Error();
+                    const rel = (await res.json()).find(r => !r.draft && !r.prerelease && /^android-v\d+\.\d+\.\d+$/.test(r.tag_name));
+                    if (rel) {
+                        const apk = (rel.assets || []).find(a => a.name.endsWith('.apk'));
+                        latest = { version: rel.tag_name.replace('android-v', ''), url: apk ? apk.browser_download_url : rel.html_url,
+                                   page: rel.html_url, checkedAt: Date.now() };
+                        localStorage.setItem('gb_app_latest', JSON.stringify(latest));
+                    }
+                } catch (e) { if (force) window.showToast('새 버전을 확인하지 못했어요.', 'error'); }
+            }
+            const info = window.getAppUpdateInfo();
+            if (!info) return;
+            if (!info.newer) { if (force) window.showToast(`최신 버전(${info.current})을 쓰고 있어요.`, 'success'); return; }
+            // '나중에'를 누른 버전은 3일 동안 다시 묻지 않는다 (직접 확인하면 항상 보여줌)
+            let dismissed = null;
+            try { dismissed = JSON.parse(localStorage.getItem('gb_app_update_dismissed') || 'null'); } catch (e) {}
+            if (!force && dismissed && dismissed.version === info.version && Date.now() - dismissed.at < 3 * 86400 * 1000) return;
+            window.showAppUpdateDialog(info);
+        };
+        const UPDATE_ICON = {{ icon('download', 36) | tojson }};
+        window.showAppUpdateDialog = function(info) {
+            let dlg = document.getElementById('app-update-dialog');
+            if (!dlg) {
+                dlg = document.createElement('dialog');
+                dlg.id = 'app-update-dialog';
+                document.body.appendChild(dlg);
+            }
+            const esc = window.escapeHtml;
+            dlg.innerHTML = `<div style="text-align: center; padding: 4px 0;">
+                <div style="color: var(--brand); display: flex; justify-content: center; margin-bottom: 10px;">${UPDATE_ICON}</div>
+                <h3 style="margin-bottom: 6px;">새 버전 ${esc(info.version)}이 나왔어요</h3>
+                <p style="font-size: 14px; color: var(--text-2); margin-bottom: 18px; line-height: 1.5;">지금 버전은 ${esc(info.current)}이에요.<br>설치 파일을 받아 설치하면 그대로 업데이트돼요.</p>
+                <a class="btn no-spa" href="${esc(info.url)}" target="_blank" rel="noopener" style="margin-bottom: 8px;" onclick="document.getElementById('app-update-dialog').close()">업데이트 받기</a>
+                <a class="btn secondary no-spa" href="${esc(info.page)}" target="_blank" rel="noopener" style="margin-bottom: 8px;">바뀐 내용 보기</a>
+                <button type="button" class="btn secondary" id="app-update-later">나중에</button>
+            </div>`;
+            dlg.querySelector('#app-update-later').onclick = () => {
+                localStorage.setItem('gb_app_update_dismissed', JSON.stringify({ version: info.version, at: Date.now() }));
+                dlg.close();
+            };
+            if (!dlg.open) dlg.showModal();
+        };
+        if (window.GagyebbuuAndroid) setTimeout(() => window.checkAppUpdate(false), 1500);
 
         window.toggleSlide = function(wrapperId, arrowId) {
             const wrapper = document.getElementById(wrapperId);

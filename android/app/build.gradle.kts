@@ -18,8 +18,8 @@ android {
         applicationId = "com.johun.gagyebbuu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         // 앱은 이 주소의 웹앱을 그대로 띄운다. 화면/기능은 웹 배포만으로 바뀌므로 앱 업데이트가 필요 없다.
         buildConfigField("String", "BASE_URL", "\"https://gagyebbuu.vercel.app\"")
     }

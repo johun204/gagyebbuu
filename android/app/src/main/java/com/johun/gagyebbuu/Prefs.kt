@@ -17,6 +17,16 @@ class Prefs(context: Context) {
         get() = sp.getStringSet("watched", emptySet())!!.toSet()
         set(v) = sp.edit().putStringSet("watched", v).apply()
 
+    /** 상대방 활동 알림(앱 푸시) 켜짐 여부 */
+    var partnerPush: Boolean
+        get() = sp.getBoolean("partner_push", false)
+        set(v) = sp.edit().putBoolean("partner_push", v).apply()
+
+    /** 마지막으로 확인한 알림 id (-1 = 아직 기준점 없음) */
+    var lastLogId: Long
+        get() = sp.getLong("last_log_id", -1)
+        set(v) = sp.edit().putLong("last_log_id", v).apply()
+
     var introShown: Boolean
         get() = sp.getBoolean("intro_shown", false)
         set(v) = sp.edit().putBoolean("intro_shown", v).apply()

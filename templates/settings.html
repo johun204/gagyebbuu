@@ -48,9 +48,14 @@
     </button>
     <div class="menu-row" style="cursor: default;">
         <span class="icon-wrap">{{ icon('bell', 20) }}</span>
-        <span class="grow">푸시 알림<br><small class="caption">상대방이 내역을 등록·수정·삭제하면 알려드려요</small></span>
+        <span class="grow">푸시 알림<br><small class="caption" id="push-caption">상대방이 내역을 등록·수정·삭제하면 알려드려요</small></span>
         <label class="switch"><input type="checkbox" id="push-toggle-input" onchange="window.togglePushSubscription()" aria-label="푸시 알림"><span class="slider"></span></label>
     </div>
+    <button type="button" class="menu-row" id="android-version-row" style="display: none;" onclick="window.checkAppUpdate(true)">
+        <span class="icon-wrap">{{ icon('download', 20) }}</span>
+        <span class="grow">앱 버전 <span id="android-version"></span><br><small class="caption" id="android-version-caption">눌러서 새 버전 확인</small></span>
+        <span class="muted">{{ icon('chevron-right', 20) }}</span>
+    </button>
     <button type="button" class="menu-row" id="android-detect-row" style="display: none;" onclick="window.GagyebbuuAndroid.openSettings()">
         <span class="icon-wrap">{{ icon('sliders', 20) }}</span>
         <span class="grow">알림 자동 감지<br><small class="caption">문자·카드앱 알림에서 입출금을 찾아 등록을 도와드려요</small></span>
@@ -77,6 +82,12 @@
 <script>
 {
     if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.openSettings) document.getElementById('android-detect-row').style.display = '';
+    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.appVersion) {
+        document.getElementById('android-version-row').style.display = '';
+        document.getElementById('android-version').textContent = window.GagyebbuuAndroid.appVersion();
+        const info = window.getAppUpdateInfo && window.getAppUpdateInfo();
+        if (info) document.getElementById('android-version-caption').textContent = info.newer ? `새 버전 ${info.version}이 있어요 · 눌러서 업데이트` : '최신 버전이에요';
+    }
 
     let theme = 'system';
     try { theme = localStorage.getItem('gb_theme') || 'system'; } catch (e) {}
@@ -120,16 +131,43 @@
         const reg = await navigator.serviceWorker.ready;
         return reg.pushManager.getSubscription();
     };
+    // 안드로이드 앱(WebView)에는 웹 푸시(PushManager)가 없어서 앱이 직접 새 알림을 확인해 띄운다.
+    const bridge = window.GagyebbuuAndroid;
+    const appPush = !!(bridge && typeof bridge.setPushEnabled === 'function');
+    const setCaption = t => { const c = document.getElementById('push-caption'); if (c) c.textContent = t; };
     const refreshPushToggle = async () => {
         const input = document.getElementById('push-toggle-input');
         if (!input) return;
-        if (!('serviceWorker' in navigator) || !('PushManager' in window)) { input.disabled = true; return; }
+        if (appPush) {
+            input.disabled = false;
+            input.checked = bridge.getPushEnabled();
+            setCaption('상대방이 내역을 등록·수정·삭제하면 알려드려요 (앱이 약 15분마다 확인)');
+            return;
+        }
+        if (bridge) {
+            input.disabled = true;
+            setCaption('앱을 최신 버전으로 업데이트하면 켤 수 있어요');
+            return;
+        }
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+            input.disabled = true;
+            setCaption(/iPhone|iPad/i.test(navigator.userAgent)
+                ? '아이폰은 Safari에서 홈 화면에 추가한 앱에서만 켤 수 있어요'
+                : '이 브라우저는 푸시 알림을 지원하지 않아요');
+            return;
+        }
         const sub = await getPushSubscription();
         input.checked = !!sub;
     };
 
     window.togglePushSubscription = async function() {
         const input = document.getElementById('push-toggle-input');
+        if (appPush) {
+            const r = bridge.setPushEnabled(input.checked);
+            if (r === 'need_permission') window.showToast('알림 권한을 허용하면 알림이 와요.', 'error');
+            else window.showToast(input.checked ? '푸시 알림을 켰어요.' : '푸시 알림을 껐어요.', input.checked ? 'success' : undefined);
+            return;
+        }
         try {
             if (!input.checked) {
                 const existing = await getPushSubscription();
