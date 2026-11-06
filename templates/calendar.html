@@ -68,6 +68,7 @@
         const key = `${y}-${m}`;
         if (window.allMonthsData[key]) return window.allMonthsData[key];
         const res = await fetch(`/api/calendar_data?year=${y}&month=${m}`);
+        if (!res.ok) throw new Error('calendar_data ' + res.status);
         const data = await res.json();
         window.allMonthsData[key] = data;
         return data;
@@ -159,7 +160,13 @@
         window.setStoredMonth(y, m);
         window.history.replaceState(window.history.state, '', `/calendar?year=${y}&month=${m}`);
         localStorage.setItem('gb_last_page', `/calendar?year=${y}&month=${m}`);
-        const data = await window.fetchMonthData(y, m);
+        const wrap = document.getElementById('calendar-slider-wrapper');
+        const loading = !window.allMonthsData[`${y}-${m}`];
+        if (loading) window.markRefreshing(wrap, true);
+        let data;
+        try { data = await window.fetchMonthData(y, m); }
+        catch (e) { window.showToast('데이터를 불러오지 못했어요.', 'error'); return; }
+        finally { if (loading) window.markRefreshing(wrap, false); }
         if (!keepDate) window.selectedDate = defaultDateFor(y, m);
         document.getElementById('slide-curr').innerHTML = window.renderCalendarGrid(data);
         fitHeight();

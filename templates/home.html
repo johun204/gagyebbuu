@@ -235,7 +235,7 @@
         localStorage.setItem('gb_last_page', `/home?year=${y}&month=${m}`);
         const body = document.getElementById('home-body');
         if (!opts.fresh && cache[key(y, m)]) { render(cache[key(y, m)]); return; }
-        body.classList.add('is-refreshing');
+        window.markRefreshing(body, true);
         try {
             const res = await fetch(`/api/home_data?year=${y}&month=${m}`);
             if (!res.ok) throw new Error();
@@ -244,7 +244,7 @@
             if (window.homeY === y && window.homeM === m) render(d);
         } catch (e) {
             window.showToast('데이터를 불러오지 못했어요.', 'error');
-        } finally { body.classList.remove('is-refreshing'); }
+        } finally { window.markRefreshing(body, false); }
     }
 
     window.homeShift = function(dir) {

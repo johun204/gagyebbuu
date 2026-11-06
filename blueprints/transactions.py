@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, g
 from sqlalchemy.orm import joinedload
 
-from models import db, User, Category, Transaction
+from models import db, User, Category, Transaction, DetectedTx
 from helpers import (spa_redirect, get_or_create_uncategorized, month_range, require_ledger, json_error,
                      parse_amount, parse_int, parse_datetime, parse_year_month, clean_text, safe_next_url,
                      resolve_transactor, TransactorInfo, serialize_tx, norm_color, TX_TYPES, UNCATEGORIZED, MAX_TITLE_LEN, MAX_MEMO_LEN)
@@ -260,6 +260,10 @@ def add_transaction():
     new_tx = Transaction(ledger_id=ledger.id, user_id=user.id, transactor=transactor,
                          transactor_user_id=transactor_user_id, category_id=cat_id, **data)
     db.session.add(new_tx)
+    # 감지 내역을 보고 등록한 경우 그 감지 내역은 처리 완료
+    detected_id = parse_int(request.form.get('detected_id'))
+    if detected_id:
+        DetectedTx.query.filter_by(id=detected_id, user_id=user.id).delete()
     db.session.commit()
 
     notify_partner(ledger.id, user.id, '가계쀼',

@@ -75,3 +75,37 @@ class Notification(db.Model):
     message = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
     is_read = db.Column(db.Boolean, default=False)
+
+
+class PushLog(db.Model):
+    """사용자에게 보낸 알림 기록 (상단 종 버튼의 알림 목록). 30일이 지나면 정리된다."""
+    __table_args__ = (
+        db.Index('ix_push_log_user_created', 'user_id', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)  # 받는 사람
+    title = db.Column(db.String(100), nullable=False, default='')
+    body = db.Column(db.String(255), nullable=False, default='')
+    url = db.Column(db.String(255), nullable=False, default='/home')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)
+    is_read = db.Column(db.Boolean, nullable=False, default=False)
+
+
+class DetectedTx(db.Model):
+    """안드로이드 앱이 기기 알림(문자/카드앱 등)에서 감지한 입출금. 등록하거나 삭제하기 전까지
+    대기하며, 7일이 지나면 정리된다. 금액/내용 등은 등록 화면에 미리 채울 값이다."""
+    __table_args__ = (
+        db.Index('ix_detected_tx_user_created', 'user_id', 'created_at'),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    source_app = db.Column(db.String(150), nullable=False, default='')  # 패키지명
+    source_label = db.Column(db.String(100), nullable=False, default='')  # 앱 이름
+    raw_text = db.Column(db.String(1000), nullable=False, default='')
+    tx_type = db.Column(db.String(10), nullable=False, default='지출')
+    amount = db.Column(db.BigInteger, nullable=False)
+    title = db.Column(db.String(100), nullable=False, default='')
+    datetime_val = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.now)

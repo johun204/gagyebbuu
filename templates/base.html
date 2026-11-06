@@ -98,6 +98,8 @@
             while (attempt <= maxRetries) {
                 try {
                     const response = await originalFetch(resource, config);
+                    // 서비스워커가 네트워크 대신 저장된 응답을 준 경우 X-GB-Offline 헤더가 붙어 온다
+                    if (window.setOffline) window.setOffline(response.headers.get('X-GB-Offline') === '1');
 
                     if (response.status === 401 && !window.location.pathname.startsWith('/login')) {
                         localStorage.removeItem('jwt_token');
@@ -122,6 +124,11 @@
                     return response;
 
                 } catch (error) {
+                    // 오프라인이면 재시도/서버 지연 안내 없이 바로 실패시키고 오프라인 표시만 한다.
+                    if (navigator.onLine === false) {
+                        if (window.setOffline) window.setOffline(true);
+                        throw error;
+                    }
                     if (attempt < maxRetries) {
                         attempt++;
                         await new Promise(resolve => setTimeout(resolve, delay));
@@ -331,7 +338,22 @@
         /* ===== 로딩 스켈레톤 ===== */
         .skeleton { background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 50%, var(--surface-2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        .is-refreshing { opacity: .55; transition: opacity .2s; }
+        .is-refreshing { opacity: .45; transition: opacity .2s; pointer-events: none; }
+
+        /* 이전 데이터를 보여주며 최신 데이터를 불러오는 중 */
+        .refresh-pill { position: fixed; top: calc(env(safe-area-inset-top) + 64px); left: 50%; transform: translate(-50%, -12px); z-index: 9998; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: var(--r-full); background: var(--text); color: var(--bg); font-size: 13px; font-weight: 700; box-shadow: 0 8px 24px rgba(0,0,0,.18); opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; white-space: nowrap; }
+        .refresh-pill.show { opacity: 1; transform: translate(-50%, 0); }
+        .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: spin .7s linear infinite; flex-shrink: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 오프라인 안내 */
+        .offline-bar { display: none; position: sticky; top: env(safe-area-inset-top); z-index: 999; margin: -4px 0 10px; padding: 10px 14px; border-radius: var(--r-md); background: var(--warning-soft); color: var(--warning); font-size: 13.5px; font-weight: 700; align-items: center; gap: 8px; }
+        .offline-bar small { display: block; font-weight: 500; color: var(--text-2); font-size: 12.5px; }
+        html.is-offline .offline-bar { display: flex; }
+
+        /* 상단 알림(종) 버튼 */
+        .bell-btn { position: relative; }
+        .bell-btn .bell-badge { position: absolute; top: 4px; right: 3px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--critical); color: #fff; font-size: 10.5px; font-weight: 800; line-height: 17px; text-align: center; border: 2px solid var(--bg); box-sizing: content-box; }
 
         .chart-box { position: relative; width: 100%; }
         .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12.5px; color: var(--text-2); margin-top: 10px; }
@@ -347,6 +369,8 @@
 <body>
     <div id="nprogress"></div>
     <div id="toast-container" class="toast-container"></div>
+    <div id="refresh-pill" class="refresh-pill" role="status" aria-live="polite"><span class="spinner"></span><span>최신 데이터 불러오는 중…</span></div>
+    <div class="offline-bar" role="status">{{ icon('alert', 18) }}<div>오프라인 상태예요<small>마지막으로 불러온 내용을 보여주고 있어요. 연결되면 자동으로 새로고침돼요.</small></div></div>
 
     <!-- 화면 콘텐츠(#app-content)가 파싱되면서 곧바로 실행되는 인라인 스크립트가 있어서
          여기서 쓰는 공용 함수는 #app-content보다 먼저 정의되어야 한다. -->
@@ -375,6 +399,22 @@
                 toast.classList.remove('show');
                 setTimeout(() => toast.remove(), 250);
             }, 2600);
+        };
+
+        // 이전 데이터를 보여준 채 최신 데이터를 불러오는 동안: 해당 영역을 흐리게 + 상단에 '불러오는 중' 표시
+        window.refreshingCount = 0;
+        window.markRefreshing = function(el, on) {
+            if (el) el.classList.toggle('is-refreshing', on);
+            window.refreshingCount = Math.max(0, window.refreshingCount + (on ? 1 : -1));
+            const pill = document.getElementById('refresh-pill');
+            if (pill) pill.classList.toggle('show', window.refreshingCount > 0);
+        };
+
+        // 오프라인 표시 (브라우저 online/offline 이벤트 + 실제 요청 실패로 판단)
+        window.setOffline = function(off) {
+            const was = document.documentElement.classList.contains('is-offline');
+            document.documentElement.classList.toggle('is-offline', off);
+            if (was && !off && typeof window.onBackOnline === 'function') window.onBackOnline();
         };
 
         // 연/월 도우미 (화면 스크립트가 로드되자마자 쓰므로 #app-content 보다 앞에 둔다)
@@ -424,7 +464,7 @@
         {% endif %}
     </script>
 
-    <main id="app-content">{% block content %}{% endblock %}
+    <main id="app-content">{% if notif_badge %}<div id="gb-badge" hidden data-unread="{{ notif_badge.unread }}" data-detected="{{ notif_badge.detected }}"></div>{% endif %}{% block content %}{% endblock %}
         {% if g.get('ledger') and g.get('user') %}{% include '_tx_sheet.html' %}{% endif %}
     </main>
 
@@ -532,6 +572,31 @@
             });
         }
 
+        window.setOffline(navigator.onLine === false);
+        window.addEventListener('offline', () => window.setOffline(true));
+        window.addEventListener('online', () => window.setOffline(false));
+        // 다시 연결되면 지금 화면을 최신 데이터로 새로 그린다
+        window.onBackOnline = function() {
+            window.showToast('다시 연결됐어요. 최신 내용으로 새로고침할게요.', 'success');
+            if (!document.querySelector('.sheet.active, dialog[open]')) navigate(window.location.pathname + window.location.search, false);
+        };
+
+        // 각 화면 상단 바 오른쪽에 알림(종) 버튼을 붙인다. 배지 = 안 읽은 알림 + 대기 중인 감지 내역
+        window.mountBell = function() {
+            const holder = document.getElementById('gb-badge');
+            const bar = document.querySelector('#app-content .appbar');
+            if (!holder || !bar || bar.querySelector('.bell-btn') || window.location.pathname === '/notifications') return;
+            const count = (parseInt(holder.dataset.unread, 10) || 0) + (parseInt(holder.dataset.detected, 10) || 0);
+            const a = document.createElement('a');
+            a.href = '/notifications';
+            a.className = 'icon-btn bell-btn';
+            a.setAttribute('aria-label', count ? `알림 ${count}개` : '알림');
+            a.innerHTML = {{ icon('bell', 24) | tojson }} + (count ? `<span class="bell-badge">${count > 99 ? '99+' : count}</span>` : '');
+            const settings = bar.querySelector('a[href="/settings"]');
+            if (settings) bar.insertBefore(a, settings);
+            else bar.appendChild(a);
+        };
+
         window.toggleSlide = function(wrapperId, arrowId) {
             const wrapper = document.getElementById(wrapperId);
             const arrow = document.getElementById(arrowId);
@@ -570,6 +635,9 @@
             if (push) window.history.pushState({path: url}, '', url);
             saveLastPage(window.location.pathname + window.location.search);
             window.scrollTo(0, 0);
+            window.refreshingCount = 0;
+            window.markRefreshing(null, false);
+            window.mountBell();
 
             const scripts = document.getElementById('app-content').querySelectorAll('script');
             scripts.forEach(s => {
@@ -603,11 +671,18 @@
                     if (bar) bar.style.transform = 'scaleX(0)';
                     return;
                 }
+                if (navigator.onLine === false) {
+                    document.getElementById('app-content').innerHTML = `<div class="card" style="margin-top: 40px;"><div class="empty">오프라인이라 이 화면을 불러오지 못했어요.<br>연결되면 자동으로 다시 불러올게요.</div></div>`;
+                    if (pushState) window.history.pushState({path: url}, '', url);
+                    return;
+                }
                 window.location.href = url;
             }
             finally { bar.style.transform = 'scaleX(1)'; setTimeout(() => { bar.style.transition = 'none'; bar.style.transform = 'scaleX(0)'; }, 300); }
         }
         window.navigate = navigate;
+
+        window.mountBell();
 
         window.addEventListener('popstate', (e) => { if (e.state) navigate(window.location.pathname + window.location.search, false); });
 

@@ -134,11 +134,16 @@
         return params.toString();
     };
 
+    window.searchRefreshing = false;
+    const stopRefreshing = () => {
+        if (window.searchRefreshing) { window.searchRefreshing = false; window.markRefreshing($('tx-results'), false); }
+    };
+
     window.loadMoreResults = async function(reset) {
         const results = $('tx-results');
         if (reset) {
             window.searchState = { page: 1, hasNext: true, isLoading: false, lastDate: '' };
-            results.classList.add('is-refreshing');
+            if (!window.searchRefreshing) { window.searchRefreshing = true; window.markRefreshing(results, true); }
             updateFilterCount();
         }
         const s = window.searchState;
@@ -150,11 +155,11 @@
 
         try {
             const res = await fetch(`/api/transactions?${window.buildSearchQuery(s.page)}`);
-            if (!res.ok) { window.showToast(await window.readError(res, '검색하지 못했어요.'), 'error'); s.isLoading = false; return; }
+            if (!res.ok) { window.showToast(await window.readError(res, '검색하지 못했어요.'), 'error'); stopRefreshing(); s.isLoading = false; return; }
             const data = await res.json();
             if (reset) {
                 results.innerHTML = '';
-                results.classList.remove('is-refreshing');
+                stopRefreshing();
                 $('results-summary').innerHTML = `<span><b style="color:var(--text)">${data.total_count}건</b></span>
                     <span>${data.sum_income ? `수입 <b class="income-text">+${won(data.sum_income)}</b> · ` : ''}지출 <b style="color:var(--text)">-${won(data.sum_expense)}</b></span>`;
             }
@@ -177,7 +182,7 @@
             $('loading-text').style.display = (!s.hasNext && data.total_count > 0) ? 'block' : 'none';
             window.refreshResultsObserver();
         } catch (e) {
-            results.classList.remove('is-refreshing');
+            stopRefreshing();
         } finally { s.isLoading = false; }
     };
 

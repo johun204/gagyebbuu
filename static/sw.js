@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gagye-bbu-cache-v9';
+const CACHE_NAME = 'gagye-bbu-cache-v10';
 const STATIC_URLS = [
     '/',
     '/home',
@@ -115,8 +115,14 @@ self.addEventListener('fetch', event => {
                 return response;
             })
             .catch(() => {
-                // 오프라인 상태 시 캐시된 화면 및 스켈레톤을 렌더링하도록 맵핑
+                // 오프라인 상태 시 캐시된 화면 및 스켈레톤을 렌더링하도록 맵핑.
+                // 화면이 '오프라인(예전 내용)'임을 알 수 있도록 같은 출처 응답에는 X-GB-Offline 헤더를 붙인다.
                 return caches.match(event.request).then(res => {
+                    if (res && res.type !== 'opaque') {
+                        const headers = new Headers(res.headers);
+                        headers.set('X-GB-Offline', '1');
+                        return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+                    }
                     if (res) return res;
                     if (event.request.mode === 'navigate') {
                         return caches.match('/');

@@ -35,6 +35,7 @@ from blueprints.calendar_routes import calendar_bp
 from blueprints.transactions import transactions_bp
 from blueprints.settings import settings_bp
 from blueprints.push import push_bp
+from blueprints.notifications import notifications_bp, badge_counts
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(home_bp)
@@ -42,6 +43,7 @@ app.register_blueprint(calendar_bp)
 app.register_blueprint(transactions_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(push_bp)
+app.register_blueprint(notifications_bp)
 
 @app.route('/sw.js')
 def serve_sw():
@@ -52,14 +54,17 @@ def serve_sw():
 def inject_user():
     user_id = getattr(request, 'user_id', None)
     has_ledger = False
+    badge = None
     if user_id:
         try:
             user = db.session.get(User, user_id)
             if user and user.ledger_id:
                 has_ledger = True
+                unread, detected = badge_counts(user.id)
+                badge = {'unread': unread, 'detected': detected}
         except Exception:
             pass
-    return dict(current_user_id=user_id, has_ledger=has_ledger)
+    return dict(current_user_id=user_id, has_ledger=has_ledger, notif_badge=badge)
 
 
 @app.after_request

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% from '_icons.html' import icon %}
+{% block content %}
+<style>
+    .ntabs { display: flex; gap: 6px; margin-bottom: 12px; }
+    .ntabs .chip .cnt { background: var(--critical); color: #fff; border-radius: 999px; font-size: 11px; padding: 0 6px; line-height: 17px; }
+    .det-row { display: flex; gap: 12px; align-items: flex-start; padding: 14px 0; }
+    .det-row + .det-row { border-top: 1px solid var(--line); }
+    .det-row input[type=checkbox] { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--brand); flex-shrink: 0; }
+    .det-row .grow { flex: 1; min-width: 0; }
+    .det-row .title { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .det-row .meta { font-size: 12.5px; color: var(--text-3); margin-top: 2px; }
+    .det-row .amount { font-size: 15px; font-weight: 800; white-space: nowrap; }
+    .det-row .actions { display: flex; gap: 6px; margin-top: 10px; }
+    .det-row details { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
+    .det-row details summary { cursor: pointer; }
+    .det-row details pre { white-space: pre-wrap; font-family: inherit; background: var(--surface-2); padding: 8px 10px; border-radius: 8px; margin-top: 4px; }
+    .det-bar { position: sticky; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px); display: flex; gap: 8px; align-items: center; background: var(--surface); padding: 10px; border-radius: var(--r-lg); box-shadow: 0 6px 24px rgba(0,0,0,.12); margin-top: 8px; }
+    .log-row { display: flex; gap: 12px; padding: 13px 0; text-decoration: none; color: inherit; }
+    .log-row + .log-row { border-top: 1px solid var(--line); }
+    .log-row .dot { margin-top: 7px; background: var(--brand); }
+    .log-row.read .dot { background: transparent; }
+    .log-row .t { font-size: 14.5px; font-weight: 700; }
+    .log-row.read .t { font-weight: 600; color: var(--text-2); }
+    .log-row .b { font-size: 13.5px; color: var(--text-2); }
+    .log-row .when { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+</style>
+
+<div class="appbar">
+    <a href="/home" class="icon-btn" style="margin-left: -8px;" aria-label="뒤로" onclick="if (history.state) { event.preventDefault(); history.back(); }">{{ icon('chevron-left', 26) }}</a>
+    <h1>알림</h1>
+</div>
+
+<div class="ntabs" role="tablist">
+    <button type="button" class="chip" data-tab="detected" onclick="window.ntShowTab('detected')">감지된 내역 <span class="cnt" id="det-count" style="display:none"></span></button>
+    <button type="button" class="chip" data-tab="logs" onclick="window.ntShowTab('logs')">알림 목록</button>
+</div>
+
+<section id="tab-detected" style="display: none;">
+    <div class="insight info" style="margin-bottom: 12px;">{{ icon('info', 18) }}
+        <div>안드로이드 앱이 문자·카드앱 알림에서 찾아낸 입출금이에요. 확인하고 등록하거나 삭제하세요.<br>
+            <b>감지된 내역은 {{ detected_keep_days }}일 동안만 보관</b>되고, 그 뒤에는 자동으로 삭제돼요.</div>
+    </div>
+    <div id="app-settings-card" class="card tight" style="display: none;">
+        <button type="button" class="menu-row" style="padding: 4px 0;" onclick="window.GagyebbuuAndroid.openSettings()">
+            <span class="icon-wrap">{{ icon('sliders', 20) }}</span><span class="grow">알림 감지 설정<br><small class="caption">어떤 앱(문자, 카드앱 등)의 알림을 읽을지 고르기</small></span><span class="muted">{{ icon('chevron-right', 20) }}</span>
+        </button>
+    </div>
+    <div class="card tight" id="det-card"><div class="list" id="det-list"></div></div>
+    <div class="det-bar" id="det-bar" style="display: none;">
+        <label style="display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; white-space: nowrap;">
+            <input type="checkbox" id="det-all" style="width: 20px; height: 20px; accent-color: var(--brand);" onchange="window.detSelectAll(this.checked)"> 전체
+        </label>
+        <button type="button" class="btn" id="det-register-btn" style="padding: 12px;" onclick="window.detRegisterSelected()">선택한 내역 등록</button>
+    </div>
+</section>
+
+<section id="tab-logs" style="display: none;">
+    <div class="card tight">
+        <div id="log-list"></div>
+    </div>
+    <p class="caption" style="text-align: center;">알림은 최근 {{ log_keep_days }}일까지만 보관돼요.</p>
+</section>
+
+<script>
+    window.ntDetected = {{ detected | tojson }};
+    window.ntLogs = {{ logs | tojson }};
+</script>
+<script>
+{
+    const $ = id => document.getElementById(id);
+    const esc = window.escapeHtml, won = window.won;
+    const selected = new Set();
+
+    window.ntShowTab = function(tab) {
+        document.querySelectorAll('.ntabs .chip').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        $('tab-detected').style.display = tab === 'detected' ? '' : 'none';
+        $('tab-logs').style.display = tab === 'logs' ? '' : 'none';
+    };
+
+    const draftOf = d => ({
+        detected_id: d.id, tx_type: d.tx_type, amount: d.amount, title: d.title, date: d.date, time: d.time,
+        category_id: d.category_id, category: d.category,
+        note: `${d.source_label || '알림'}에서 감지한 내역이에요. 확인 후 등록하세요.`,
+    });
+
+    function renderDetected() {
+        const items = window.ntDetected;
+        const cnt = $('det-count');
+        cnt.textContent = items.length; cnt.style.display = items.length ? '' : 'none';
+        [...selected].forEach(id => { if (!items.some(d => d.id === id)) selected.delete(id); });
+        if (!items.length) {
+            const inApp = !!window.GagyebbuuAndroid;
+            const isAndroid = /Android/i.test(navigator.userAgent);
+            $('det-list').innerHTML = `<div class="empty">감지된 내역이 없어요${!inApp && isAndroid
+                ? `<br><br><a class="btn small secondary no-spa" href="https://github.com/johun204/gagyebbuu/releases/latest" target="_blank" rel="noopener">안드로이드 앱 받기</a><br><small>앱을 설치하면 문자·카드앱 알림으로 지출을 자동으로 찾아드려요.</small>` : ''}</div>`;
+            $('det-bar').style.display = 'none';
+            return;
+        }
+        $('det-list').innerHTML = items.map(d => {
+            const sign = d.tx_type === '수입' ? '+' : '-';
+            return `<div class="det-row">
+                <input type="checkbox" aria-label="선택" ${selected.has(d.id) ? 'checked' : ''} onchange="window.detToggle(${d.id}, this.checked)">
+                <div class="grow">
+                    <div style="display: flex; gap: 8px; align-items: baseline;">
+                        <div class="title" style="flex: 1;">${esc(d.title || '(내용 없음)')}</div>
+                        <div class="amount ${d.tx_type === '수입' ? 'income-text' : ''}">${sign}${won(d.amount)}</div>
+                    </div>
+                    <div class="meta">${esc(d.date.slice(5).replace('-', '.'))} ${esc(d.time)} · ${esc(d.source_label || '알림')}${d.category ? ` · ${esc(d.category)}` : ''} · <span style="color: ${d.days_left <= 1 ? 'var(--critical)' : 'inherit'}">${d.days_left <= 0 ? '오늘 삭제' : d.days_left + '일 후 삭제'}</span></div>
+                    <details><summary>알림 원문</summary><pre>${esc(d.raw_text)}</pre></details>
+                    <div class="actions">
+                        <button type="button" class="btn small" onclick="window.detEdit(${d.id})">${window.ICONS.pencil} 확인 후 등록</button>
+                        <button type="button" class="btn small secondary" onclick="window.detDelete(${d.id})">${window.ICONS.trash} 삭제</button>
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        $('det-bar').style.display = '';
+        $('det-all').checked = selected.size === items.length;
+        $('det-register-btn').textContent = selected.size ? `선택한 ${selected.size}건 등록` : '등록할 내역을 선택하세요';
+        $('det-register-btn').disabled = !selected.size;
+    }
+
+    function renderLogs() {
+        const logs = window.ntLogs;
+        $('log-list').innerHTML = logs.length ? logs.map(l => `
+            <a class="log-row ${l.is_read ? 'read' : ''}" href="${esc(l.url)}">
+                <span class="dot"></span>
+                <div style="flex: 1; min-width: 0;">
+                    <div class="t">${esc(l.title)}</div>
+                    ${l.body ? `<div class="b">${esc(l.body)}</div>` : ''}
+                    <div class="when">${esc(l.created_at.replace(/-/g, '.'))}</div>
+                </div>
+            </a>`).join('') : `<div class="empty">받은 알림이 없어요</div>`;
+    }
+
+    async function reloadDetected() {
+        window.markRefreshing($('det-card'), true);
+        try {
+            const res = await fetch('/api/detected');
+            if (res.ok) { window.ntDetected = (await res.json()).items; renderDetected(); }
+        } catch (e) {} finally { window.markRefreshing($('det-card'), false); }
+    }
+
+    window.detToggle = function(id, on) { on ? selected.add(id) : selected.delete(id); renderDetected(); };
+    window.detSelectAll = function(on) { selected.clear(); if (on) window.ntDetected.forEach(d => selected.add(d.id)); renderDetected(); };
+    window.detEdit = function(id) {
+        const d = window.ntDetected.find(x => x.id === id);
+        if (d) window.openTxSheet({ draft: draftOf(d) });
+    };
+    window.detDelete = async function(id) {
+        if (!confirm('이 감지 내역을 삭제할까요? (가계부에는 등록되지 않아요)')) return;
+        try {
+            const res = await fetch(`/api/detected/${id}/delete`, { method: 'POST' });
+            if (!res.ok) throw new Error();
+            window.ntDetected = window.ntDetected.filter(d => d.id !== id);
+            renderDetected();
+            window.showToast('삭제했어요', 'success');
+        } catch (e) { window.showToast('삭제하지 못했어요.', 'error'); }
+    };
+    window.detRegisterSelected = async function() {
+        if (!selected.size) return;
+        const btn = $('det-register-btn');
+        btn.disabled = true;
+        try {
+            const res = await fetch('/api/detected/register', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: [...selected] }),
+            });
+            if (!res.ok) { window.showToast(await window.readError(res, '등록하지 못했어요.'), 'error'); }
+            else { window.showToast(`${(await res.json()).registered}건을 등록했어요`, 'success'); selected.clear(); }
+        } catch (e) { window.showToast('네트워크 오류로 등록하지 못했어요.', 'error'); }
+        await reloadDetected();
+    };
+    window.onDetectedRegistered = id => { window.ntDetected = window.ntDetected.filter(d => String(d.id) !== String(id)); renderDetected(); };
+    window.onTxChanged = reloadDetected;
+
+    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.openSettings) $('app-settings-card').style.display = '';
+
+    renderDetected();
+    renderLogs();
+
+    const params = new URLSearchParams(location.search);
+    const openId = parseInt(params.get('detected'), 10);
+    window.ntShowTab(params.get('tab') === 'logs' ? 'logs' : (openId || window.ntDetected.length || !window.ntLogs.length ? 'detected' : 'logs'));
+    if (openId) {
+        window.history.replaceState(window.history.state, '', '/notifications');
+        const d = window.ntDetected.find(x => x.id === openId);
+        if (d) setTimeout(() => window.openTxSheet({ draft: draftOf(d) }), 150);
+        else window.showToast('이미 처리됐거나 보관 기간이 지난 내역이에요.', 'error');
+    }
+
+    // 목록을 열었으면 모두 읽음 처리 (화면의 강조 표시는 이번에는 그대로 둔다)
+    if (window.ntLogs.some(l => !l.is_read)) fetch('/api/notifications/read_all', { method: 'POST' }).catch(() => {});
+}
+</script>
+{% endblock %}

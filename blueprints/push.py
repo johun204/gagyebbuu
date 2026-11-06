@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify
 from pywebpush import webpush, WebPushException
 
 import config
-from models import db, User, PushSubscription
+from models import db, User, PushSubscription, PushLog
 from helpers import json_error
 
 push_bp = Blueprint('push', __name__)
@@ -14,15 +14,18 @@ _PUSH_TIMEOUT = 5  # 초. 푸시 서버가 느려도 거래 등록 응답이 오
 
 
 def notify_partner(ledger_id, actor_user_id, title, body):
-    """상대방에게 웹 푸시를 보낸다. 거래 저장(commit) 이후에 호출되며,
+    """상대방에게 웹 푸시를 보내고 알림 목록(PushLog)에 남긴다. 거래 저장(commit) 이후에 호출되며,
     여기서 어떤 오류가 나도 원래 요청은 성공으로 끝나야 하므로 예외를 밖으로 내보내지 않는다."""
-    if not config.VAPID_PRIVATE_KEY:
-        return
     try:
         partner_ids = [u.id for u in User.query.filter(
             User.ledger_id == ledger_id, User.id != actor_user_id
         ).all()]
         if not partner_ids:
+            return
+        for pid in partner_ids:
+            db.session.add(PushLog(user_id=pid, title=title[:100], body=body[:255], url='/home'))
+        db.session.commit()
+        if not config.VAPID_PRIVATE_KEY:
             return
 
         subs = PushSubscription.query.filter(PushSubscription.user_id.in_(partner_ids)).all()

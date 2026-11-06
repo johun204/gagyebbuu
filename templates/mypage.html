@@ -184,6 +184,11 @@
             const res = await fetch('/export');
             if (!res.ok) { window.showToast('내보내지 못했어요. 다시 시도해주세요.', 'error'); return; }
             const blob = await res.blob();
+            // 안드로이드 앱(WebView)은 blob 다운로드를 못 하므로 앱에 내용을 넘겨 저장한다
+            if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.saveText) {
+                window.GagyebbuuAndroid.saveText(await blob.text(), 'ledger.csv', 'text/csv');
+                return;
+            }
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.style.display = 'none'; a.href = url; a.download = 'ledger.csv';

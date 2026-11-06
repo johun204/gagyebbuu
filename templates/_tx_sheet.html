@@ -1,6 +1,7 @@
 {% from '_icons.html' import icon %}
 {#- 모든 탭에서 같이 쓰는 내역 등록/수정 시트 + 분류 관리. base.html 이 가계부가 있는 화면에 자동으로 넣는다.
-    화면에서 쓰는 함수: openTxSheet({tx?, date?}), closeTxSheet(), deleteTx(id), openCatModal()
+    화면에서 쓰는 함수: openTxSheet({tx?, date?, draft?}), closeTxSheet(), deleteTx(id), openCatModal()
+    draft: 새 내역에 미리 채울 값 (tx 와 같은 모양, detected_id 가 있으면 등록과 함께 그 감지 내역을 처리 완료)
     저장/삭제 후에는 화면이 정의한 window.onTxChanged() 를 불러 새로고침하게 한다. -#}
 <style>
     .amount-wrap { display: flex; align-items: baseline; gap: 6px; border-bottom: 2px solid var(--line); padding: 4px 2px 8px; margin-bottom: 10px; }
@@ -27,6 +28,8 @@
     </div>
 
     <form id="tx-form" class="no-spa" method="POST" action="/transaction" autocomplete="off">
+        <input type="hidden" name="detected_id" id="txf-detected-id" value="">
+        <p class="caption" id="txf-detected-note" style="display: none; margin: -6px 0 12px;"></p>
         <div class="seg" style="margin-bottom: 18px;">
             <button type="button" id="txf-type-expense" class="active is-expense" onclick="window.txSheetSetType('지출')">지출</button>
             <button type="button" id="txf-type-income" class="is-income" onclick="window.txSheetSetType('수입')">수입</button>
@@ -150,7 +153,11 @@
     window.openTxSheet = function(opts) {
         opts = opts || {};
         const tx = opts.tx;
+        const draft = !tx && opts.draft ? opts.draft : null;
         const form = $('tx-form');
+        $('txf-detected-id').value = draft && draft.detected_id ? draft.detected_id : '';
+        $('txf-detected-note').style.display = draft && draft.note ? '' : 'none';
+        $('txf-detected-note').textContent = draft && draft.note ? draft.note : '';
         window.txSheetEditingId = tx ? tx.id : null;
         $('tx-sheet-title').textContent = tx ? '내역 수정' : '내역 추가';
         form.action = tx ? `/transaction/${tx.id}/edit` : '/transaction';
@@ -158,18 +165,21 @@
 
         const now = new Date();
         const defDate = opts.date || (typeof window.txSheetDefaultDate === 'function' && window.txSheetDefaultDate()) || ymd(now);
-        window.txSheetSetType(tx ? tx.tx_type : '지출');
-        $('txf-amount').value = tx ? Number(tx.amount).toLocaleString() : '';
+        const src = tx || draft;
+        window.txSheetSetType(src ? src.tx_type : '지출');
+        $('txf-amount').value = src ? Number(src.amount).toLocaleString() : '';
         window.syncTransactorGroup($('txf-who'), tx ? (tx.transactor_value || tx.transactor) : ME);
-        $('txf-title').value = tx ? tx.title : '';
-        $('txf-date').value = tx ? tx.date : defDate;
-        $('txf-time').value = tx ? tx.time : hm(now);
+        $('txf-title').value = src ? (src.title || '') : '';
+        $('txf-date').value = src ? src.date : defDate;
+        $('txf-time').value = src ? src.time : hm(now);
         $('txf-memo').value = tx ? (tx.memo || '') : '';
         $('txf-exclude-budget').checked = !!(tx && tx.exclude_budget);
         $('txf-exclude-analysis').checked = !!(tx && tx.exclude_analysis);
         $('txf-more').open = !!(tx && (tx.memo || tx.exclude_budget || tx.exclude_analysis));
         if (tx) window.txSheetSuggest.setCategoryId(tx.category_id, tx.category);
-        else window.txSheetSuggest.reset();
+        else window.txSheetSuggest.reset().then(() => {
+            if (draft && draft.category_id) window.txSheetSuggest.setCategoryId(draft.category_id, draft.category);
+        });
 
         $('tx-sheet-overlay').classList.add('active');
         $('tx-sheet').classList.add('active');
@@ -201,6 +211,7 @@
                 let data = {};
                 try { data = await res.json(); } catch (_) {}
                 window.closeTxSheet();
+                if (isAdd && $('txf-detected-id').value && typeof window.onDetectedRegistered === 'function') window.onDetectedRegistered($('txf-detected-id').value);
                 if (isAdd && data.auto_category) window.showToast(`과거 내역을 참고해 '${data.auto_category}' 분류로 등록했어요`, 'success');
                 else window.showToast(isAdd ? '등록했어요' : '수정했어요', 'success');
                 notifyChanged();

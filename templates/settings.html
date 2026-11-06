@@ -51,6 +51,11 @@
         <span class="grow">푸시 알림<br><small class="caption">상대방이 내역을 등록·수정·삭제하면 알려드려요</small></span>
         <label class="switch"><input type="checkbox" id="push-toggle-input" onchange="window.togglePushSubscription()" aria-label="푸시 알림"><span class="slider"></span></label>
     </div>
+    <button type="button" class="menu-row" id="android-detect-row" style="display: none;" onclick="window.GagyebbuuAndroid.openSettings()">
+        <span class="icon-wrap">{{ icon('sliders', 20) }}</span>
+        <span class="grow">알림 자동 감지<br><small class="caption">문자·카드앱 알림에서 입출금을 찾아 등록을 도와드려요</small></span>
+        <span class="muted">{{ icon('chevron-right', 20) }}</span>
+    </button>
     <div class="menu-row" style="cursor: default; flex-wrap: wrap;">
         <span class="icon-wrap">{{ icon('moon', 20) }}</span>
         <span class="grow">화면 테마</span>
@@ -71,6 +76,8 @@
 
 <script>
 {
+    if (window.GagyebbuuAndroid && window.GagyebbuuAndroid.openSettings) document.getElementById('android-detect-row').style.display = '';
+
     let theme = 'system';
     try { theme = localStorage.getItem('gb_theme') || 'system'; } catch (e) {}
     document.querySelectorAll('[data-theme-opt]').forEach(b => b.classList.toggle('active', b.dataset.themeOpt === theme));
