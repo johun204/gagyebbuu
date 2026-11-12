@@ -54,8 +54,7 @@ _DT_PATTERNS = [
 # 가맹점(상대방) 후보에서 지울 것들. 지운 자리에서 조각을 나눈다.
 _NOISE_PATTERNS = [
     re.compile(r'\[[^\]]*\]'),                            # [Web발신], [KB]
-    re.compile(r'\([^)]*\)'),                             # (1*2*), (일시불), (주), (목)
-    re.compile(rf'(?:누적|잔액|잔고|한도|가능|포인트|적립|합계|총액|수수료)\s*:?\s*(?:₩|KRW)?\s*(?:{_NUM})\s*원?'),
+    re.compile(rf'(?:누적|잔액|잔고|한도|가능|포인트|적립|합계|총액|수수료)\s*:?\s*(?:₩|KRW)?\s*[-+]?(?:{_NUM})\s*원?'),  # 잔액-5,202,047 (마이너스통장)
     _FOREIGN,
     re.compile(rf'(?:₩|KRW|원화)\s*(?:{_NUM})|(?:{_NUM})\s*원'),
     re.compile(r'(?:20\d{2}\s*[./-]\s*)?\d{1,2}\s*[./-]\s*\d{1,2}(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?'),
@@ -83,6 +82,7 @@ _BRAND_WORDS = {
     '카카오뱅크', '토스뱅크', '케이뱅크', '하나머니', '카카오페이머니', '네이버페이머니', '페이머니', '머니',
 }
 _VERB_TAIL = re.compile(r'(습니다|니다|어요|아요|해요|돼요|세요|었음|됨)[.!~?]*$')
+_KIND_WORD = re.compile(r'^\S{1,6}(?:입금|출금)$')  # 은행 문자의 거래 종류: FBS출금, 전자금융입금, ATM출금
 _HALBU = re.compile(r'^(?:할부)?\d*개월$|^할부\S*$')
 _COUNTERPARTY = re.compile(r'^(.+?)님(?:이|께서|으로부터|에게서)$')   # 보낸 사람: 홍길동님이
 _RECIPIENT = re.compile(r'^(.+?)님(?:에게|께)$')                     # 받는 사람: 홍길동님에게
@@ -93,7 +93,7 @@ _CORP = re.compile(r'\(주\)|㈜|주식회사|\(유\)|유한회사')
 def _normalize(title, text):
     full = '\n'.join(s for s in ((title or '').strip(), (text or '').strip()) if s)
     full = unicodedata.normalize('NFKC', full).replace('\r', '')
-    full = re.sub(r'[​-‏⁠﻿]', '', full)
+    full = re.sub(r'[​-‏‪-‮⁠⁦-⁩﻿]', '', full)
     full = re.sub(r'^[ \t]*[■□▶▷●○◆◇※•·\-*>]+[ \t]*', '', full, flags=re.M)  # 글머리표
     full = re.sub(r'[ \t ]+', ' ', full)
     full = re.sub(r'\n\s*\n+', '\n', full)
@@ -222,12 +222,16 @@ def _pick_datetime(s, posted_at):
 def _clean_merchant(s):
     s = _CORP.sub(' ', s or '')
     s = re.sub(r'\s+', ' ', s).strip(' ,.:;|/-')
+    if re.fullmatch(r'\([^()]*\)', s):  # '(스타비해외)' 처럼 통째로 괄호에 싸인 경우
+        s = s[1:-1].strip()
     return s[:MAX_TITLE_LEN]
 
 
 def _clean_token(tok):
     tok = tok.strip(' ,.:;|/·-~!?"\'')
-    if not tok or re.fullmatch(r'[\d,.%]+', tok):
+    if tok.count('(') != tok.count(')'):  # '카드입금(' 처럼 짝이 안 맞는 괄호
+        tok = tok.strip('()')
+    if not tok or re.fullmatch(r'[\d,.%]+', tok) or _KIND_WORD.match(tok):
         return ''
     if tok in _NOISE_WORDS or tok in _BRAND_WORDS or _VERB_TAIL.search(tok) or _HALBU.match(tok):
         return ''
@@ -248,7 +252,16 @@ _ISSUER_TOKEN = re.compile(r'\S*(?:카드|은행|뱅크|뱅킹|BANK|Bank|bank|�
 _KEEP_ISSUER = re.compile(r'대금|요금|수수료|보험|연회비|이자')
 
 
+def _paren(m):
+    # (1*2*), (일시불), (목) 같은 부가 정보는 지우고, '씨유(CU)' 처럼 상호의 일부인 괄호는 남긴다
+    inner = m.group(1).strip()
+    if not inner or re.search(r'[\d*]', inner) or re.fullmatch(r'[월화수목금토일]', inner) or _CORP.fullmatch(m.group(0)):
+        return '\n'
+    return m.group(0) if any(_clean_token(t) for t in inner.split()) else '\n'
+
+
 def _fragments(s):
+    s = re.sub(r'\(([^()\n]*)\)', _paren, s)
     for p in _NOISE_PATTERNS:
         s = p.sub('\n', s)
     s = _ISSUER_TOKEN.sub(lambda m: m.group(0) if _KEEP_ISSUER.search(m.group(0)) else '\n', s)

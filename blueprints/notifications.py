@@ -1,14 +1,16 @@
+import logging
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, g
 
 from models import db, Category, Transaction, PushLog, DetectedTx
 from helpers import (require_ledger, json_error, clean_text, get_or_create_uncategorized, parse_int,
-                     MAX_TITLE_LEN)
+                     MAX_TITLE_LEN, MAX_AMOUNT)
 from txparse import parse_notification, MAX_RAW_LEN
 from blueprints.push import notify_partner
 from blueprints.transactions import suggest_category_id
 
 notifications_bp = Blueprint('notifications', __name__)
+log = logging.getLogger(__name__)
 
 LOG_KEEP_DAYS = 30        # 알림 목록 보관 기간
 DETECTED_KEEP_DAYS = 7    # 감지 내역 유효 기간
@@ -136,17 +138,23 @@ def api_detect():
         if posted_at > now + timedelta(minutes=5) or posted_at < now - timedelta(days=DETECTED_KEEP_DAYS):
             posted_at = now
 
-    parsed = parse_notification(title, text, posted_at)
-    if not parsed:
+    try:
+        parsed = parse_notification(title, text, posted_at)
+    except Exception:  # 해석 오류로 500 이 나면 앱이 같은 알림을 계속 다시 보내며 뒤의 알림까지 막힌다
+        log.exception('parse_notification failed')
+        parsed = None
+    if not parsed or parsed['amount'] > MAX_AMOUNT:
         return jsonify({'success': True, 'ignored': True})
 
     raw = '\n'.join(s for s in (title, text) if s)[:MAX_RAW_LEN]
     purge_old(user.id)
+    # 같은 건인지는 거래 시각으로 본다. 받은 시각으로 보면 오프라인 동안 쌓였다가 한꺼번에 올라온
+    # 같은 금액의 서로 다른 결제(버스 요금 등)가 하나로 합쳐진다.
     same = DetectedTx.raw_text == raw
     if parsed['amount'] > 0:  # 해외 결제(금액 0)는 원문이 같을 때만 같은 건으로 본다
-        same = db.or_(same, db.and_(DetectedTx.amount == parsed['amount'], DetectedTx.tx_type == parsed['tx_type'],
-                                    DetectedTx.created_at >= now - _DUP_WINDOW))
-    dup = _valid_detected(user.id).filter(same).first()
+        same = db.or_(same, db.and_(DetectedTx.amount == parsed['amount'], DetectedTx.tx_type == parsed['tx_type']))
+    dup = _valid_detected(user.id).filter(same, DetectedTx.datetime_val >= parsed['datetime'] - _DUP_WINDOW,
+                                          DetectedTx.datetime_val <= parsed['datetime'] + _DUP_WINDOW).first()
     if dup:
         db.session.commit()
         return jsonify({'success': True, 'duplicate': True, 'id': dup.id})

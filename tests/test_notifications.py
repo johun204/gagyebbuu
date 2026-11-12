@@ -33,11 +33,22 @@ def test_non_transaction_ignored_and_duplicates_merged(make_ledger, client_for):
     _, (chulsoo, _), _ = make_ledger()
     c = client_for(chulsoo)
     assert detect(c, text='오늘 저녁 뭐 먹지', title='카톡').get_json()['ignored'] is True
-    first = detect(c).get_json()['id']
-    assert detect(c).get_json() == {'success': True, 'duplicate': True, 'id': first}
+    sms = datetime.now().strftime('[Web발신]\n신한카드(1234)승인 홍*동 12,000원(일시불)%m/%d %H:%M 스타벅스')
+    first = detect(c, text=sms).get_json()['id']
+    assert detect(c, text=sms).get_json() == {'success': True, 'duplicate': True, 'id': first}
     # 같은 결제를 카드앱이 다른 문구로 다시 알려도 하나로 본다
     assert detect(c, title='신한 SOL페이', text='12,000원 결제 | 스타벅스').get_json()['duplicate'] is True
     assert DetectedTx.query.count() == 1
+
+
+def test_same_amount_at_different_times_kept_separately(make_ledger, client_for):
+    # 오프라인 동안 쌓인 알림이 한꺼번에 올라와도 거래 시각이 다르면 따로 남는다
+    _, (chulsoo, _), _ = make_ledger()
+    c = client_for(chulsoo)
+    day = (datetime.now() - timedelta(days=1)).strftime('%m/%d')
+    a = detect(c, text=f'[Web발신]\n신한카드승인 홍*동 1,500원 {day} 08:10 티머니').get_json()
+    b = detect(c, text=f'[Web발신]\n신한카드승인 홍*동 1,500원 {day} 18:40 티머니').get_json()
+    assert 'duplicate' not in a and 'duplicate' not in b and a['id'] != b['id']
 
 
 def test_register_from_sheet_consumes_detection(make_ledger, client_for):
