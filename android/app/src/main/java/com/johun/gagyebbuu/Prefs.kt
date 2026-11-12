@@ -26,8 +26,7 @@ class Prefs(context: Context) {
         get() = sp.getBoolean("intro_shown", false)
         set(v) = sp.edit().putBoolean("intro_shown", v).apply()
 
-    @Synchronized
-    fun enqueue(item: JSONObject) {
+    fun enqueue(item: JSONObject) = synchronized(LOCK) {
         val q = queue()
         q.put(item)
         // 너무 오래 오프라인이어도 무한히 쌓이지 않게 최근 200건만 유지
@@ -36,12 +35,10 @@ class Prefs(context: Context) {
         sp.edit().putString("queue", trimmed.toString()).apply()
     }
 
-    @Synchronized
-    fun queue(): JSONArray = JSONArray(sp.getString("queue", "[]"))
+    fun queue(): JSONArray = synchronized(LOCK) { JSONArray(sp.getString("queue", "[]")) }
 
     /** 처리한 항목(posted_at+key 로 식별)을 대기열에서 뺀다. */
-    @Synchronized
-    fun removeFromQueue(done: Set<String>) {
+    fun removeFromQueue(done: Set<String>) = synchronized(LOCK) {
         val q = queue()
         val rest = JSONArray()
         for (i in 0 until q.length()) {
@@ -52,8 +49,7 @@ class Prefs(context: Context) {
     }
 
     /** 같은 알림이 갱신되며 여러 번 올라오는 것을 걸러내기 위한 최근 본 알림 지문. */
-    @Synchronized
-    fun seenRecently(fingerprint: String, now: Long): Boolean {
+    fun seenRecently(fingerprint: String, now: Long): Boolean = synchronized(LOCK) {
         val seen = JSONObject(sp.getString("seen", "{}"))
         val cutoff = now - 24 * 60 * 60 * 1000L
         val keep = JSONObject()
@@ -61,6 +57,11 @@ class Prefs(context: Context) {
         val hit = keep.has(fingerprint)
         keep.put(fingerprint, now)
         sp.edit().putString("seen", keep.toString()).apply()
-        return hit
+        hit
+    }
+
+    companion object {
+        // 알림 수신(리스너)과 업로드(워커)가 각자 Prefs 를 만들어 쓰므로 인스턴스가 아닌 공용 잠금을 쓴다
+        private val LOCK = Any()
     }
 }

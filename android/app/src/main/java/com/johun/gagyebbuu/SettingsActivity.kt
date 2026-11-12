@@ -82,7 +82,7 @@ class SettingsActivity : ComponentActivity() {
 
     /**
      * 웹이 넘겨준 로그인 토큰을 저장한다. 다른 사이트가 남의 토큰을 넘겨 이 기기의 카드 알림을 가로채지 못하도록,
-     * 서버에서 토큰 주인을 확인하고 지금 연결된 계정과 다르면 사용자에게 한 번 더 묻는다.
+     * 서버에서 토큰 주인을 확인하고, 전에 연결했던 계정이 아니면(처음 연결 포함) 사용자에게 한 번 더 묻는다.
      */
     private fun receiveToken(intent: Intent?) {
         val token = intent?.data?.takeIf { it.scheme == "gagyebbuu" }?.getQueryParameter("token")
@@ -101,7 +101,7 @@ class SettingsActivity : ComponentActivity() {
                     UploadWorker.schedule(this)
                     updateStatus()
                 }
-                if (prefs.token == null || prefs.userId == userId) {
+                if (prefs.userId == userId) {
                     save()
                 } else {
                     AlertDialog.Builder(this)
