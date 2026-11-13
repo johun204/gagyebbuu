@@ -1,9 +1,11 @@
 package com.johun.gagyebbuu
 
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.work.WorkManager
 import com.google.androidbrowserhelper.trusted.LauncherActivity
+import com.google.androidbrowserhelper.trusted.TwaLauncher
 
 /**
  * 웹앱(BASE_URL)을 크롬 Trusted Web Activity 로 띄운다. 크롬 그대로라 웹 푸시·카카오 로그인·파일 저장 등
@@ -22,6 +24,15 @@ class MainActivity : LauncherActivity() {
         Notifier.ensureChannels(this)
     }
 
+    /**
+     * 크롬이 있으면 기본 브라우저와 상관없이 크롬으로 연다. 로그인·웹 푸시 구독이 크롬에 있고,
+     * 기본 브라우저가 삼성 인터넷이면 연결을 기다리다 빈 화면에서 멈추는 일이 있었다.
+     */
+    override fun createTwaLauncher(): TwaLauncher {
+        val chrome = try { packageManager.getApplicationInfo(CHROME, 0).enabled } catch (e: PackageManager.NameNotFoundException) { false }
+        return if (chrome) TwaLauncher(this, CHROME) else super.createTwaLauncher()
+    }
+
     override fun getLaunchingUrl(): Uri {
         val base = Uri.parse(BuildConfig.BASE_URL)
         val path = intent?.getStringExtra(EXTRA_PATH)
@@ -36,5 +47,6 @@ class MainActivity : LauncherActivity() {
 
     companion object {
         const val EXTRA_PATH = "path"
+        private const val CHROME = "com.android.chrome"
     }
 }
