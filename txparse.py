@@ -22,12 +22,14 @@ _FOREIGN = re.compile(r'(USD|JPY|EUR|CNY|GBP|HKD|SGD|AUD|CAD|THB|VND|PHP|TWD|CHF
 _BARE_AFTER_KEYWORD = re.compile(rf'(?:입금|출금|이체|결제|승인|지급|인출|송금|금액)\s*:?\s*(?<![\d-])({_NUM})(?![\d,]*\s*원)(?![-/:.*\d])')
 
 # 금액 바로 앞/뒤에 이런 말이 있으면 거래 금액이 아니다
-_EXCLUDE_BEFORE = re.compile(r'(누적|잔액|잔고|한도|가능|포인트|적립|합계|총액|수수료|예정|청구|최대|최소|할인|이용가능|사용가능)[^\n\d]{0,4}$')
+_EXCLUDE_BEFORE = re.compile(r'(누적|잔액|잔여|잔고|한도|가능|포인트|적립|합계|총액|수수료|예정|청구|최대|최소|할인|이용가능|사용가능)[^\n\d]{0,4}$')
 _EXCLUDE_AFTER = re.compile(r'^\s*(적립|할인|포인트|이상|이하|한도)')
 
 _TX_WORDS = re.compile(r'승인|결제|출금|입금|사용|이체|송금|보냈|받았|들어왔|환불|취소|납부|지급|인출|캐시백|급여|이자|구매|충전')
 _INCOME_WORDS = re.compile(r'입금(?!자|처|예정)|받았|받은|들어왔|들어옴|환불|캐시백|급여|이자|수령|입금됨|충전')
 _EXPENSE_WORDS = re.compile(r'승인|결제|출금|사용|보냈|보낸|송금|납부|자동이체|이체|지급|인출|구매')
+_CARD_HINT = re.compile(r'카드|체크')
+_CLOCK = re.compile(r'(?<!\d)\d{1,2}:\d{2}(?!\d)')
 _REFUND = re.compile(r'취소|환불')
 _REJECT = re.compile(r'\(광고\)|\[광고\]|^광고|승인\s*거절|거절|예정|명세서|인증\s*번호|OTP|결제일\s*안내|미납|연체|이벤트|혜택\s*안내|실패')
 
@@ -54,7 +56,7 @@ _DT_PATTERNS = [
 # 가맹점(상대방) 후보에서 지울 것들. 지운 자리에서 조각을 나눈다.
 _NOISE_PATTERNS = [
     re.compile(r'\[[^\]]*\]'),                            # [Web발신], [KB]
-    re.compile(rf'(?:누적|잔액|잔고|한도|가능|포인트|적립|합계|총액|수수료)\s*:?\s*(?:₩|KRW)?\s*[-+]?(?:{_NUM})\s*원?'),  # 잔액-5,202,047 (마이너스통장)
+    re.compile(rf'(?:누적|잔액|잔여|잔고|한도|가능|포인트|적립|합계|총액|수수료)\s*:?\s*(?:₩|KRW)?\s*[-+]?(?:{_NUM})\s*원?'),  # 잔액-5,202,047 (마이너스통장)
     _FOREIGN,
     re.compile(rf'(?:₩|KRW|원화)\s*(?:{_NUM})|(?:{_NUM})\s*원'),
     re.compile(r'(?:20\d{2}\s*[./-]\s*)?\d{1,2}\s*[./-]\s*\d{1,2}(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?'),
@@ -307,8 +309,10 @@ def parse_notification(title, text, posted_at=None):
     원화 금액을 알 수 없는 해외 결제는 amount=0 (사용자가 금액을 입력)."""
     posted_at = posted_at or datetime.now()
     full = _normalize(title, text)
-    # 거래 단어가 없어도 '₩4,800 | 이디야커피' 처럼 원화 기호가 붙은 금액이면 결제 알림으로 본다
-    if not full or _REJECT.search(full) or not (_TX_WORDS.search(full) or re.search(r'₩\s*\d', full)):
+    # 거래 단어가 없어도 '₩4,800 | 이디야커피' 처럼 원화 기호가 붙은 금액이거나,
+    # 'KB국민체크 9090 / 11/13 13:22 / 38,000원' 처럼 카드 이름과 시각이 함께 있으면 결제 알림으로 본다
+    if not full or _REJECT.search(full) or not (_TX_WORDS.search(full) or re.search(r'₩\s*\d', full)
+                                                or (_CARD_HINT.search(full) and _CLOCK.search(full))):
         return None
 
     kv = _parse_kv(full)
