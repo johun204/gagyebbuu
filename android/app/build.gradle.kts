@@ -18,12 +18,17 @@ android {
         applicationId = "com.johun.gagyebbuu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "1.2.3"
+        versionCode = 7
+        versionName = "1.3.0"
         // 앱은 이 주소의 웹앱을 크롬(Trusted Web Activity)으로 그대로 띄운다. 화면/기능/웹 푸시는 웹 배포만으로
         // 바뀌므로 앱 업데이트가 필요 없다.
         buildConfigField("String", "BASE_URL", "\"https://gagyebbuu.vercel.app\"")
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    // 해석기 테스트는 PC(JVM)와 기기(정규식 엔진이 다르다) 양쪽에서 같은 파일로 돌린다
+    sourceSets["androidTest"].java.srcDir("src/test/java")
+    sourceSets["androidTest"].resources.srcDir("src/test/resources")
 
     signingConfigs {
         if (keystoreProps.isNotEmpty()) {
@@ -56,4 +61,9 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.11.0")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
     implementation("com.google.androidbrowserhelper:androidbrowserhelper:2.7.4")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
+    androidTestImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test:runner:1.7.0")
 }

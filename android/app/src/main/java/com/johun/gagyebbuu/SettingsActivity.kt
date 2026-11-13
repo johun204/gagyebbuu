@@ -172,7 +172,7 @@ class SettingsActivity : ComponentActivity() {
         addView(loginStatus)
 
         addView(text("2. 읽을 앱 선택", 17f, bold = true).apply { setPadding(0, dp(20), 0, dp(4)) })
-        addView(text("고른 앱의 알림 중 금액·입출금 문구가 있는 것만 서버로 보내 내역을 찾아요. 감지된 내역은 7일 동안 보관되고, 앱의 알림 화면에서 등록하거나 삭제할 수 있어요.", 13f, muted = true))
+        addView(text("고른 앱의 알림을 이 기기에서 살펴보고, 입출금 내역으로 판단된 것만 서버로 보내요. 그 밖의 알림은 기기 밖으로 나가지 않아요. 감지된 내역은 7일 동안 보관되고, 앱의 알림 화면에서 등록하거나 삭제할 수 있어요.", 13f, muted = true))
         if (Build.VERSION.SDK_INT >= 35) {
             addView(text("참고: Android 15부터는 인증번호처럼 보이는 숫자(예: '(1234)' 같은 4자리 번호)가 든 알림은 시스템이 내용을 가려서 읽을 수 없어요. 이런 알림은 감지되지 않을 수 있어요.", 13f, muted = true))
         }

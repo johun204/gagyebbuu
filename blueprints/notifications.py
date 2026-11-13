@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, jsonify, g
 
 from models import db, Category, Transaction, PushLog, DetectedTx
 from helpers import (require_ledger, json_error, clean_text, get_or_create_uncategorized, parse_int,
-                     MAX_TITLE_LEN, MAX_AMOUNT)
+                     TX_TYPES, MAX_TITLE_LEN, MAX_AMOUNT)
 from txparse import parse_notification, MAX_RAW_LEN
 from blueprints.push import notify_partner
 from blueprints.transactions import suggest_category_id
@@ -122,10 +122,26 @@ def api_detected():
     return jsonify({'items': items})
 
 
+def _parsed_by_app(p):
+    """앱이 기기에서 해석해 보낸 값({'tx_type','amount','title','datetime'})을 확인한다. 형식이 틀리면 None."""
+    if not isinstance(p, dict) or p.get('tx_type') not in TX_TYPES:
+        return None
+    amount, title = p.get('amount'), p.get('title')
+    if type(amount) is not int or amount < 0 or not isinstance(title, str):
+        return None
+    try:
+        dt = datetime.strptime(p.get('datetime'), '%Y-%m-%dT%H:%M:%S')
+    except (TypeError, ValueError):
+        return None
+    return {'tx_type': p['tx_type'], 'amount': amount, 'title': title, 'datetime': dt}
+
+
 @notifications_bp.route('/api/detected', methods=['POST'])
 @require_ledger
 def api_detect():
-    """안드로이드 앱이 기기 알림 원문을 보낸다. 거래로 해석되면 저장하고 알림 문구를 돌려준다."""
+    """안드로이드 앱이 감지한 거래를 저장하고 알림 문구를 돌려준다.
+    앱 1.3 부터는 기기에서 해석해 거래인 알림만 해석 결과(parsed)와 함께 보낸다.
+    그 전 버전은 알림 원문만 보내므로 여기서 해석한다."""
     user = g.user
     data = request.get_json(silent=True) or {}
     title = clean_text(data.get('title'), 200)
@@ -138,11 +154,14 @@ def api_detect():
         if posted_at > now + timedelta(minutes=5) or posted_at < now - timedelta(days=DETECTED_KEEP_DAYS):
             posted_at = now
 
-    try:
-        parsed = parse_notification(title, text, posted_at)
-    except Exception:  # 해석 오류로 500 이 나면 앱이 같은 알림을 계속 다시 보내며 뒤의 알림까지 막힌다
-        log.exception('parse_notification failed')
-        parsed = None
+    if 'parsed' in data:
+        parsed = _parsed_by_app(data['parsed'])
+    else:
+        try:
+            parsed = parse_notification(title, text, posted_at)
+        except Exception:  # 해석 오류로 500 이 나면 앱이 같은 알림을 계속 다시 보내며 뒤의 알림까지 막힌다
+            log.exception('parse_notification failed')
+            parsed = None
     if not parsed or parsed['amount'] > MAX_AMOUNT:
         return jsonify({'success': True, 'ignored': True})
 

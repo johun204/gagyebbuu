@@ -136,3 +136,11 @@ def test_year_rollover_and_after_midnight():
 def test_no_date_uses_posted_time():
     r = parse_notification('네이버페이', '8,900원 결제', NOW)
     assert r['datetime'] == NOW
+
+
+def test_app_parser_cases_up_to_date():
+    # 앱의 TxParser.kt 테스트가 쓰는 기대값. 다르면 `python tests/app_parser_cases.py` 로 다시 만들고 앱 해석기도 맞춘다
+    import json
+    import app_parser_cases
+    with open(app_parser_cases.PATH, encoding='utf-8') as f:
+        assert json.load(f) == app_parser_cases.build()

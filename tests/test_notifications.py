@@ -160,3 +160,21 @@ def test_asset_links_public_and_me(app, make_ledger, client_for):
     assert target['package_name'] == 'com.johun.gagyebbuu' and len(target['sha256_cert_fingerprints'][0]) == 95
     _, (chulsoo, _), _ = make_ledger()
     assert client_for(chulsoo).get('/api/me').get_json() == {'user_id': chulsoo.id, 'nickname': '철수', 'ledger': '우리집'}
+
+
+def test_detect_parsed_by_app(make_ledger, client_for):
+    # 앱 1.3 부터는 기기에서 해석한 결과를 함께 보낸다. 서버는 다시 해석하지 않고 그 값을 쓴다
+    _, (chulsoo, _), _ = make_ledger()
+    c = client_for(chulsoo)
+    parsed = {'tx_type': '지출', 'amount': 38000, 'title': '리안헤어 가재울점', 'datetime': '2026-11-13T13:22:00'}
+    data = detect(c, title='KB국민카드', text='앱이 해석한 알림', parsed=parsed).get_json()
+    d = db.session.get(DetectedTx, data['id'])
+    assert (d.tx_type, d.amount, d.title, d.datetime_val) == ('지출', 38000, '리안헤어 가재울점', datetime(2026, 11, 13, 13, 22))
+    assert d.raw_text == 'KB국민카드\n앱이 해석한 알림' and '38,000원 지출' in data['notify']['title']
+    # 같은 건을 다른 문구로 다시 보내면 하나로 본다
+    assert detect(c, text='다른 문구', parsed=parsed).get_json() == {'success': True, 'duplicate': True, 'id': d.id}
+    # 형식이 틀린 값은 저장하지 않는다 (본문이 거래처럼 보여도 서버가 대신 해석하지 않는다)
+    for bad in (None, {}, dict(parsed, tx_type='이체'), dict(parsed, amount='38000'), dict(parsed, amount=-1),
+                dict(parsed, amount=10 ** 13), dict(parsed, title=None), dict(parsed, datetime='어제')):
+        assert detect(c, parsed=bad).get_json() == {'success': True, 'ignored': True}
+    assert DetectedTx.query.count() == 1

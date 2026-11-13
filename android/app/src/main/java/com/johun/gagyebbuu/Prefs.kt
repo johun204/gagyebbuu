@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 로그인 토큰, 읽을 앱 목록, 서버로 보낼 알림 대기열을 저장한다. */
+/** 로그인 토큰, 읽을 앱 목록, 서버로 보낼 감지 내역 대기열을 저장한다. */
 class Prefs(context: Context) {
     private val sp = context.applicationContext.getSharedPreferences("gagyebbuu", Context.MODE_PRIVATE)
 

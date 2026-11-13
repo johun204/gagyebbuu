@@ -5,10 +5,14 @@ import android.content.pm.PackageManager
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 /**
- * 사용자가 고른 앱(문자, 카드앱 등)의 알림을 읽어 서버로 보낸다.
- * 해석(금액/가맹점 추출)은 서버가 하므로 규칙이 바뀌어도 앱을 업데이트할 필요가 없다.
+ * 사용자가 고른 앱(문자, 카드앱 등)의 알림을 읽어 입출금 내역인지 기기에서 해석하고(TxParser),
+ * 거래로 판단된 것만 서버로 보낸다. 그 밖의 알림은 기기 밖으로 나가지 않는다.
  */
 class TxListenerService : NotificationListenerService() {
 
@@ -25,8 +29,14 @@ class TxListenerService : NotificationListenerService() {
             ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString().orEmpty()
         val all = "$title\n$text"
 
-        // 개인 메시지가 서버로 가지 않도록 금액/입출금 단서가 있는 알림만 보낸다 (정밀한 판단은 서버가 한다)
-        if (!LOOKS_LIKE_MONEY.containsMatchIn(all)) return
+        // 서버의 날짜 계산과 맞도록 받은 시각을 한국 시간으로 바꿔 해석한다
+        val postedAt = LocalDateTime.ofInstant(Instant.ofEpochMilli(sbn.postTime), SEOUL)
+        val parsed = try {
+            TxParser.parse(title, text, postedAt)
+        } catch (e: Exception) {  // 해석 오류로 알림 수신 서비스가 죽지 않게 한다
+            null
+        }
+        if (parsed == null || parsed.amount > TxParser.MAX_AMOUNT) return
         if (prefs.seenRecently("${sbn.packageName}|${all.hashCode()}", System.currentTimeMillis())) return
 
         val label = try {
@@ -41,11 +51,18 @@ class TxListenerService : NotificationListenerService() {
             put("title", title)
             put("text", text)
             put("posted_at", sbn.postTime)
+            put("parsed", JSONObject().apply {
+                put("tx_type", parsed.txType)
+                put("amount", parsed.amount)
+                put("title", parsed.title)
+                put("datetime", parsed.datetime.format(ISO_SECONDS))
+            })
         })
         UploadWorker.schedule(this)
     }
 
     companion object {
-        private val LOOKS_LIKE_MONEY = Regex("""\d[\d,]*\s*원|입금|출금|승인|결제""")
+        private val SEOUL = ZoneId.of("Asia/Seoul")
+        private val ISO_SECONDS = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")
     }
 }

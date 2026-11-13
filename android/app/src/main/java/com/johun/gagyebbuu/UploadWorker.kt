@@ -13,7 +13,7 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** 대기열의 알림을 서버(/api/detected)로 보낸다. 네트워크가 없으면 연결될 때까지 기다렸다가 보낸다. */
+/** 대기열의 감지 내역(기기에서 거래로 해석된 알림)을 서버(/api/detected)로 보낸다. 네트워크가 없으면 연결될 때까지 기다렸다가 보낸다. */
 class UploadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, params) {
 
     override suspend fun doWork(): Result {
