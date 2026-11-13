@@ -1,8 +1,14 @@
 package com.johun.gagyebbuu
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.work.WorkManager
 import com.google.androidbrowserhelper.trusted.LauncherActivity
 import com.google.androidbrowserhelper.trusted.TwaLauncher
@@ -17,21 +23,58 @@ import com.google.androidbrowserhelper.trusted.TwaLauncher
  */
 class MainActivity : LauncherActivity() {
 
+    private val handler = Handler(Looper.getMainLooper())
+
+    /**
+     * TWA 는 브라우저의 서비스에 연결된 뒤에야 열리는데, 브라우저가 응답하지 않으면(삼성 인터넷이 백그라운드에서
+     * 멈춰 있을 때 등) 끝없이 기다리며 빈 화면만 보인다. 잠시 기다려도 안 열리면 일반 브라우저 탭으로 연다.
+     */
+    private val fallback = Runnable {
+        try {
+            val tab = CustomTabsIntent.Builder().build()
+            // 패키지를 정하지 않으면 이 주소를 여는 앱인 이 앱이 다시 열린다
+            tab.intent.setPackage(browserPackage())
+            tab.launchUrl(this, launchingUrl)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(this, R.string.no_browser, Toast.LENGTH_LONG).show()
+        }
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // v1.1 의 상대방 알림 주기 확인 작업은 웹 푸시로 바뀌어 없어졌다
         WorkManager.getInstance(this).cancelUniqueWork("partner-poll")
         Notifier.ensureChannels(this)
+        if (!isFinishing) handler.postDelayed(fallback, LAUNCH_TIMEOUT_MS)
+    }
+
+    // 브라우저가 떠서 이 화면이 가려지면 기다릴 필요가 없다
+    override fun onPause() {
+        super.onPause()
+        handler.removeCallbacks(fallback)
+    }
+
+    override fun onDestroy() {
+        handler.removeCallbacks(fallback)
+        super.onDestroy()
     }
 
     /**
-     * 크롬이 있으면 기본 브라우저와 상관없이 크롬으로 연다. 로그인·웹 푸시 구독이 크롬에 있고,
-     * 기본 브라우저가 삼성 인터넷이면 연결을 기다리다 빈 화면에서 멈추는 일이 있었다.
+     * 크롬이 있으면 기본 브라우저와 상관없이 크롬으로 연다 (기본 브라우저가 바뀌어도 로그인·웹 푸시 구독이 유지된다).
+     * 크롬이 없으면 TWA 를 지원하는 기본 브라우저(삼성 인터넷 등)로 연다.
      */
-    override fun createTwaLauncher(): TwaLauncher {
-        val chrome = try { packageManager.getApplicationInfo(CHROME, 0).enabled } catch (e: PackageManager.NameNotFoundException) { false }
-        return if (chrome) TwaLauncher(this, CHROME) else super.createTwaLauncher()
-    }
+    override fun createTwaLauncher(): TwaLauncher =
+        if (hasChrome()) TwaLauncher(this, CHROME) else super.createTwaLauncher()
+
+    private fun hasChrome(): Boolean =
+        try { packageManager.getApplicationInfo(CHROME, 0).enabled } catch (e: PackageManager.NameNotFoundException) { false }
+
+    /** 크롬, 없으면 기기의 기본 브라우저 */
+    private fun browserPackage(): String? =
+        if (hasChrome()) CHROME
+        else packageManager.resolveActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://example.com")),
+            PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
 
     override fun getLaunchingUrl(): Uri {
         val base = Uri.parse(BuildConfig.BASE_URL)
@@ -47,6 +90,7 @@ class MainActivity : LauncherActivity() {
 
     companion object {
         const val EXTRA_PATH = "path"
+        private const val LAUNCH_TIMEOUT_MS = 4000L
         private const val CHROME = "com.android.chrome"
     }
 }

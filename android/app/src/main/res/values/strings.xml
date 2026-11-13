@@ -3,4 +3,5 @@
     <string name="app_name">가계쀼</string>
     <string name="settings_title">알림 자동 감지</string>
     <string name="asset_statements" translatable="false">[{\"include\": \"https://gagyebbuu.vercel.app/.well-known/assetlinks.json\"}]</string>
+    <string name="no_browser">웹 브라우저를 찾을 수 없어요. 크롬을 설치해 주세요.</string>
 </resources>

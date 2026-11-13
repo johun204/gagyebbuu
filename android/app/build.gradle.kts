@@ -18,8 +18,8 @@ android {
         applicationId = "com.johun.gagyebbuu"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.2.2"
+        versionCode = 6
+        versionName = "1.2.3"
         // 앱은 이 주소의 웹앱을 크롬(Trusted Web Activity)으로 그대로 띄운다. 화면/기능/웹 푸시는 웹 배포만으로
         // 바뀌므로 앱 업데이트가 필요 없다.
         buildConfigField("String", "BASE_URL", "\"https://gagyebbuu.vercel.app\"")
